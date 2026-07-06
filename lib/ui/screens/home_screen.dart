@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -108,7 +109,7 @@ class _ClockCard extends StatelessWidget {
         : null;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -132,9 +133,46 @@ class _ClockCard extends StatelessWidget {
               const SizedBox(height: 8),
               _BlockChip(block: block),
             ],
+            const SizedBox(height: 6),
+            _ConditionBar(condition: session.condition),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 컨디션 게이지. 회식·심야 매매로 깎이고 자면 회복된다.
+class _ConditionBar extends StatelessWidget {
+  const _ConditionBar({required this.condition});
+
+  final int condition;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = condition >= 70
+        ? Colors.teal
+        : (condition >= 40 ? Colors.amber : Colors.redAccent);
+    return Row(
+      children: [
+        const Text('🔋', style: TextStyle(fontSize: 13)),
+        const SizedBox(width: 6),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: condition / 100,
+              minHeight: 6,
+              backgroundColor: Colors.white.withValues(alpha: 0.08),
+              color: color,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text('$condition',
+            style: TextStyle(
+                fontSize: 12, color: color, fontWeight: FontWeight.w700)),
+      ],
     );
   }
 }
@@ -378,6 +416,51 @@ class _FeedBubble extends StatelessWidget {
   }
 }
 
+/// (디버그 빌드 전용) 테스트 편의 점프 버튼. 릴리즈엔 안 보인다.
+class _DebugJumpRow extends StatelessWidget {
+  const _DebugJumpRow({required this.controller});
+
+  final GameController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = controller.session;
+    final now = session.clock.minuteOfDay;
+    WorkBlock? nextMeeting;
+    for (final b in session.todaySchedule.blocks) {
+      if (b.kind == WorkBlockKind.meeting && b.startMin >= now) {
+        nextMeeting = b;
+        break;
+      }
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: nextMeeting == null
+                  ? null
+                  // 블록 진입 틱에서 인터랙션이 트리거되도록 시작+1틱까지 진행.
+                  : () => controller.debugJumpTo(nextMeeting!.startMin + 15),
+              child: const Text('🛠 회의⏩', style: TextStyle(fontSize: 12)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: now >= GameClock.workEndMinute
+                  ? null
+                  : () => controller.debugJumpTo(GameClock.workEndMinute + 15),
+              child: const Text('🛠 저녁⏩', style: TextStyle(fontSize: 12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DayControls extends ConsumerWidget {
   const _DayControls({required this.controller});
 
@@ -444,6 +527,7 @@ class _DayControls extends ConsumerWidget {
                 ),
               ],
             ),
+            if (kDebugMode) _DebugJumpRow(controller: controller),
           ],
         );
       case DayStage.dayOver:

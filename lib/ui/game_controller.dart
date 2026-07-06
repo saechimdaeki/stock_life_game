@@ -12,7 +12,7 @@ import '../data/save_repository.dart';
 import '../engine/engine.dart';
 
 /// 근무 블록 진입 시 뜨는 인터랙션 종류.
-enum WorkInteractionKind { meeting, smoke, lunch, dinner }
+enum WorkInteractionKind { meeting, smoke, lunch, dinner, coffee }
 
 /// 대기 중인 근무 인터랙션 (UI가 감지해 모달로 띄운다).
 class WorkInteraction {
@@ -128,12 +128,16 @@ class GameController extends ChangeNotifier {
   }
 
   /// 출근 후(아침 이후) 장중에 텔레그램 속보를 간간히 올린다.
+  /// 30%는 진행 중인 진짜 이벤트 방향을 흘리는 '단독' 힌트, 나머지는 노이즈.
   void _maybePushNews() {
     if (_session.clock.phase == DayPhase.morning) return;
-    if (_rng.nextDouble() < 0.28) {
-      _session.pushNews(
-          rollFlavorNews(_rng, _session.market, _session.clock.minuteOfDay));
-    }
+    if (_rng.nextDouble() >= 0.28) return;
+    final minute = _session.clock.minuteOfDay;
+    final item = _rng.nextDouble() < 0.30
+        ? (rollHintNews(_rng, _session.market, minute) ??
+            rollFlavorNews(_rng, _session.market, minute))
+        : rollFlavorNews(_rng, _session.market, minute);
+    _session.pushNews(item);
   }
 
   /// 근무 블록에 새로 진입하면 회의(미니게임)·상사외근(담배타임) 인터랙션을 띄운다.
@@ -176,6 +180,12 @@ class GameController extends ChangeNotifier {
         pending = WorkInteraction(WorkInteractionKind.lunch, colleague: c);
         pause();
       case WorkBlockKind.focus:
+        // 업무 몰입 중 인싸 동료가 커피 마시러 가자고 꼬신다 (확률적).
+        if (kInsiders.isNotEmpty && _rng.nextDouble() < 0.25) {
+          final c = kInsiders[_rng.nextInt(kInsiders.length)];
+          pending = WorkInteraction(WorkInteractionKind.coffee, colleague: c);
+          pause();
+        }
       case WorkBlockKind.report:
         break;
     }
@@ -192,6 +202,7 @@ class GameController extends ChangeNotifier {
   /// 인터랙션 해제는 UI가 시트를 닫을 때 [resolveInteraction]로 처리.
   void finishDinner() {
     _session.drunk = true;
+    _session.applyDinnerFatigue();
     // 회식하느라 밤 늦게(미장 개장 직후)까지 시간이 흘러 있다.
     const target = GameClock.nightStartMinute + 30; // 24:00 무렵
     while (_session.clock.minuteOfDay < target) {
@@ -248,6 +259,25 @@ class GameController extends ChangeNotifier {
       if (_session.anyExchangeOpen) break;
     }
     play(); // 개장 도달 -> 정상 흐름 재개
+  }
+
+  /// (디버그 전용) [minuteOfDay]까지 즉시 진행. 인터랙션이 뜨면 거기서 멈춘다.
+  void debugJumpTo(int minuteOfDay) {
+    if (_stage != DayStage.running) return;
+    pause();
+    while (_session.clock.minuteOfDay < minuteOfDay) {
+      if (!_session.advanceTick()) {
+        _stage = DayStage.dayOver;
+        notifyListeners();
+        return;
+      }
+      _maybeTriggerInteraction();
+      if (pending != null) {
+        notifyListeners();
+        return;
+      }
+    }
+    play();
   }
 
   /// 남은 하루를 즉시 진행해 정산 화면으로 넘어간다.

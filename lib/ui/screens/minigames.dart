@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 typedef MiniGameResult = void Function(bool success);
 
 /// 회의 미니게임 한 종류. 회의 진입 시 랜덤으로 하나 뽑힌다.
+/// [build]의 handicap(0=정상 ~ 1=최악)은 컨디션 페널티 — 게임별로 난이도를 올린다.
 class MiniGameSpec {
   const MiniGameSpec({
     required this.name,
@@ -16,7 +18,7 @@ class MiniGameSpec {
 
   final String name;
   final String howTo;
-  final Widget Function(MiniGameResult onResult) build;
+  final Widget Function(MiniGameResult onResult, double handicap) build;
 }
 
 const List<MiniGameSpec> kMiniGames = [
@@ -35,19 +37,37 @@ const List<MiniGameSpec> kMiniGames = [
     howTo: '패들을 움직여 공으로 블록을 모두 부숴라',
     build: _buildBreakout,
   ),
+  MiniGameSpec(
+    name: '순서 기억',
+    howTo: '깜빡이는 순서를 기억했다가 그대로 탭!',
+    build: _buildSequence,
+  ),
+  MiniGameSpec(
+    name: '숫자 찾기',
+    howTo: '1부터 9까지 순서대로 빠르게 탭!',
+    build: _buildNumberHunt,
+  ),
 ];
 
-Widget _buildTiming(MiniGameResult r) => TimingGame(onResult: r);
-Widget _buildMash(MiniGameResult r) => MashGame(onResult: r);
-Widget _buildBreakout(MiniGameResult r) => BreakoutGame(onResult: r);
+Widget _buildTiming(MiniGameResult r, double h) =>
+    TimingGame(onResult: r, handicap: h);
+Widget _buildMash(MiniGameResult r, double h) =>
+    MashGame(onResult: r, handicap: h);
+Widget _buildBreakout(MiniGameResult r, double h) =>
+    BreakoutGame(onResult: r, handicap: h);
+Widget _buildSequence(MiniGameResult r, double h) =>
+    SequenceGame(onResult: r, handicap: h);
+Widget _buildNumberHunt(MiniGameResult r, double h) =>
+    NumberHuntGame(onResult: r, handicap: h);
 
 // ---------------------------------------------------------------------------
 // 1) 눈치 타이밍: 좌우로 스윕하는 마커를 초록 구간에서 멈춘다.
 // ---------------------------------------------------------------------------
 class TimingGame extends StatefulWidget {
-  const TimingGame({super.key, required this.onResult});
+  const TimingGame({super.key, required this.onResult, this.handicap = 0});
 
   final MiniGameResult onResult;
+  final double handicap;
 
   @override
   State<TimingGame> createState() => _TimingGameState();
@@ -55,8 +75,9 @@ class TimingGame extends StatefulWidget {
 
 class _TimingGameState extends State<TimingGame>
     with SingleTickerProviderStateMixin {
-  static const _zoneLo = 0.40;
-  static const _zoneHi = 0.60;
+  // 컨디션이 나쁘면 초록 구간이 좁아진다 (0.20 → 0.10).
+  double get _zoneLo => 0.50 - 0.10 * (1 - widget.handicap * 0.5);
+  double get _zoneHi => 0.50 + 0.10 * (1 - widget.handicap * 0.5);
   late final AnimationController _ac;
   bool _done = false;
 
@@ -149,16 +170,18 @@ class _TimingGameState extends State<TimingGame>
 // 2) 초고속 연타: 3초 안에 목표 횟수만큼 탭.
 // ---------------------------------------------------------------------------
 class MashGame extends StatefulWidget {
-  const MashGame({super.key, required this.onResult});
+  const MashGame({super.key, required this.onResult, this.handicap = 0});
 
   final MiniGameResult onResult;
+  final double handicap;
 
   @override
   State<MashGame> createState() => _MashGameState();
 }
 
 class _MashGameState extends State<MashGame> {
-  static const _target = 16;
+  // 컨디션이 나쁘면 목표 횟수 증가 (16 → 20).
+  int get _target => 16 + (widget.handicap * 4).round();
   int _count = 0;
   double _left = 3.0;
   Timer? _timer;
@@ -228,9 +251,10 @@ class _MashGameState extends State<MashGame> {
 // 3) 블록 부수기: 패들을 드래그해 공으로 블록을 전부 부순다. 공을 놓치면 실패.
 // ---------------------------------------------------------------------------
 class BreakoutGame extends StatefulWidget {
-  const BreakoutGame({super.key, required this.onResult});
+  const BreakoutGame({super.key, required this.onResult, this.handicap = 0});
 
   final MiniGameResult onResult;
+  final double handicap;
 
   @override
   State<BreakoutGame> createState() => _BreakoutGameState();
@@ -239,7 +263,9 @@ class BreakoutGame extends StatefulWidget {
 class _BreakoutGameState extends State<BreakoutGame>
     with SingleTickerProviderStateMixin {
   static const _r = 7.0;
-  static const _paddleW = 78.0;
+
+  // 컨디션이 나쁘면 패들이 좁아진다 (78 → 58).
+  double get _paddleW => 78.0 - widget.handicap * 20;
   static const _paddleH = 12.0;
   static const _paddleBottom = 20.0;
 
@@ -425,4 +451,216 @@ class _BreakoutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BreakoutPainter old) => true;
+}
+
+// ---------------------------------------------------------------------------
+// 4) 순서 기억: 2×2 버튼이 깜빡이는 순서를 기억했다가 그대로 탭.
+// ---------------------------------------------------------------------------
+class SequenceGame extends StatefulWidget {
+  const SequenceGame({super.key, required this.onResult, this.handicap = 0});
+
+  final MiniGameResult onResult;
+  final double handicap;
+
+  @override
+  State<SequenceGame> createState() => _SequenceGameState();
+}
+
+class _SequenceGameState extends State<SequenceGame> {
+  static const _colors = [
+    Colors.redAccent,
+    Colors.amber,
+    Colors.tealAccent,
+    Colors.lightBlueAccent,
+  ];
+
+  late final List<int> _seq;
+  int _flashing = -1; // 시연 중 켜진 버튼 (-1 = 꺼짐)
+  bool _showing = true;
+  int _inputIdx = 0;
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final rng = Random();
+    _seq = List.generate(4, (_) => rng.nextInt(4));
+    _playback();
+  }
+
+  Future<void> _playback() async {
+    // 컨디션이 나쁘면 깜빡임이 짧아져 외우기 어렵다 (450ms → 270ms).
+    final on = Duration(
+        milliseconds: (450 * (1 - widget.handicap * 0.4)).round());
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    for (final i in _seq) {
+      if (!mounted) return;
+      setState(() => _flashing = i);
+      await Future<void>.delayed(on);
+      if (!mounted) return;
+      setState(() => _flashing = -1);
+      await Future<void>.delayed(const Duration(milliseconds: 160));
+    }
+    if (mounted) setState(() => _showing = false);
+  }
+
+  void _tap(int i) {
+    if (_showing || _done) return;
+    if (i != _seq[_inputIdx]) {
+      _done = true;
+      widget.onResult(false);
+      return;
+    }
+    setState(() => _inputIdx++);
+    if (_inputIdx >= _seq.length) {
+      _done = true;
+      widget.onResult(true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(_showing ? '잘 봐! 👀' : '따라 눌러! ($_inputIdx/${_seq.length})',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 16),
+        for (var row = 0; row < 2; row++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var col = 0; col < 2; col++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: _pad(row * 2 + col),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _pad(int i) {
+    final lit = _flashing == i;
+    return GestureDetector(
+      onTapDown: (_) => _tap(i),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        width: 84,
+        height: 84,
+        decoration: BoxDecoration(
+          color: _colors[i].withValues(alpha: lit ? 1.0 : 0.30),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: lit
+              ? [BoxShadow(color: _colors[i], blurRadius: 16)]
+              : const [],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5) 숫자 찾기: 3×3에 섞인 1~9를 제한시간 안에 순서대로 탭.
+// ---------------------------------------------------------------------------
+class NumberHuntGame extends StatefulWidget {
+  const NumberHuntGame({super.key, required this.onResult, this.handicap = 0});
+
+  final MiniGameResult onResult;
+  final double handicap;
+
+  @override
+  State<NumberHuntGame> createState() => _NumberHuntGameState();
+}
+
+class _NumberHuntGameState extends State<NumberHuntGame> {
+  late final List<int> _grid; // 섞인 1~9
+  late double _left; // 남은 초
+  int _next = 1;
+  Timer? _timer;
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _grid = List.generate(9, (i) => i + 1)..shuffle();
+    // 컨디션이 나쁘면 제한시간 단축 (8s → 5s).
+    _left = 8.0 - widget.handicap * 3;
+    _timer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      setState(() => _left -= 0.1);
+      if (_left <= 0) _finish(false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _finish(bool ok) {
+    if (_done) return;
+    _done = true;
+    _timer?.cancel();
+    widget.onResult(ok);
+  }
+
+  void _tap(int n) {
+    if (_done || n != _next) return;
+    setState(() => _next++);
+    if (_next > 9) _finish(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text('${_left.clamp(0, 10).toStringAsFixed(1)}s — 다음: $_next',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
+        for (var row = 0; row < 3; row++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var col = 0; col < 3; col++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _cell(_grid[row * 3 + col]),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _cell(int n) {
+    final found = n < _next;
+    return GestureDetector(
+      onTapDown: (_) => _tap(n),
+      child: Container(
+        width: 60,
+        height: 60,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: found
+              ? Colors.teal.withValues(alpha: 0.25)
+              : Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text('$n',
+            style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                color: found ? Colors.teal : Colors.white)),
+      ),
+    );
+  }
 }

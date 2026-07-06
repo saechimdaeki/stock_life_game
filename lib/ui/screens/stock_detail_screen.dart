@@ -67,10 +67,13 @@ class StockDetailScreen extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               _TipLine(session: session, code: code),
-              if (session.drunk)
+              if (session.drunk || session.tooTired)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Text('🍺 취함 — 차트가 춤춘다. 정신 차리고 매매!',
+                  child: Text(
+                      session.drunk
+                          ? '🍺 취함 — 차트가 춤춘다. 정신 차리고 매매!'
+                          : '😵 과로 — 눈이 침침해서 차트가 흔들려 보인다',
                       style: TextStyle(
                           fontSize: 12,
                           color: Colors.orange.shade300,
@@ -79,7 +82,7 @@ class StockDetailScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               Expanded(
                 child: _DrunkEffect(
-                  drunk: session.drunk,
+                  drunk: session.drunk || session.tooTired,
                   child: _PriceChart(stock: stock),
                 ),
               ),

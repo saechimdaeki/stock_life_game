@@ -5,7 +5,7 @@ import '../character/character_avatar.dart';
 import '../game_controller.dart';
 
 /// 대화 상황. 문구·보상 맥락만 다르고 구조는 같다.
-enum ChatFlavor { smoke, lunch, dinner }
+enum ChatFlavor { smoke, lunch, dinner, coffee }
 
 /// 동료와의 짧은 대화(담배타임·점심·회식). 함께하면 친밀도가 오르고 정보를 얻는다.
 /// (닫기/무시하면 보상 없음.)
@@ -33,36 +33,42 @@ class _ColleagueChatSheetState extends State<ColleagueChatSheet> {
         ChatFlavor.smoke => '${widget.colleague.name}와 담배 한 대 🚬',
         ChatFlavor.lunch => '${widget.colleague.name}와 점심 식사 🍚',
         ChatFlavor.dinner => '${widget.colleague.name}와 회식 🍻',
+        ChatFlavor.coffee => '${widget.colleague.name}와 커피 한 잔 ☕',
       };
 
   String get _prompt => switch (widget.flavor) {
         ChatFlavor.smoke => '「${widget.colleague.name}」가 담배 피우러 가자는데?',
         ChatFlavor.lunch => '「${widget.colleague.name}」와 점심 같이 먹을까?',
         ChatFlavor.dinner => '「${widget.colleague.name}」가 회식 가자는데?',
+        ChatFlavor.coffee => '「${widget.colleague.name}」가 커피 마시러 가자는데?',
       };
 
   String get _acceptLabel => switch (widget.flavor) {
         ChatFlavor.smoke => '같이 간다',
         ChatFlavor.lunch => '같이 먹는다',
         ChatFlavor.dinner => '콜! 회식 간다',
+        ChatFlavor.coffee => '커피 콜 ☕',
       };
 
   String get _declineLabel => switch (widget.flavor) {
         ChatFlavor.smoke => '자리 지킨다',
         ChatFlavor.lunch => '혼자 먹는다',
         ChatFlavor.dinner => '다음에요',
+        ChatFlavor.coffee => '일이 많아서...',
       };
 
   String get _lead => switch (widget.flavor) {
         ChatFlavor.smoke => '담배 피우며 들은 소문',
         ChatFlavor.lunch => '밥 먹으며 들은 얘기',
         ChatFlavor.dinner => '회식 자리에서 들은 얘기',
+        ChatFlavor.coffee => '커피 마시며 들은 수다',
       };
 
   String get _noTipText => switch (widget.flavor) {
         ChatFlavor.smoke => '"시장이 조용하네~" 담배만 태웠다.',
         ChatFlavor.lunch => '"요즘 살 만한 게 없네~" 밥만 먹고 왔다.',
         ChatFlavor.dinner => '"오늘은 그냥 마시자~" 별 얘기 없이 취했다.',
+        ChatFlavor.coffee => '"주말에 뭐 해?" 수다만 떨다 왔다.',
       };
 
   void _join() {

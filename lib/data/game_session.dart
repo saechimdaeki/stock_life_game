@@ -77,6 +77,27 @@ class GameSession {
   /// 회식 등으로 취한 상태. 밤 미장 차트가 흔들려 보인다. 아침이면 술 깸.
   bool drunk = false;
 
+  /// 컨디션 0~100. 회식·심야 매매로 깎이고 수면으로 회복. 저장됨.
+  /// 낮으면 미니게임이 어려워지고 팁 적중률이 떨어지고 차트가 흐려 보인다.
+  int condition = 100;
+
+  /// 심야 매매 컨디션 차감은 하루 1회만.
+  bool _nightTradePenalized = false;
+
+  void _spendCondition(int amount) {
+    condition = (condition - amount).clamp(0, 100);
+  }
+
+  /// 회식: 컨디션 -25 (취함 처리는 컨트롤러가 함께 한다).
+  void applyDinnerFatigue() => _spendCondition(25);
+
+  /// 미니게임 난이도 페널티 0~1. 컨디션 40 미만부터 걸린다.
+  double get minigameHandicap =>
+      condition >= 40 ? 0 : (40 - condition) / 40;
+
+  /// 피곤해서 차트가 흐려 보이는 상태 (취함 효과 재사용).
+  bool get tooTired => condition < 30;
+
   /// 텔레그램형 속보 피드(오늘). 아침 뉴스 + 장중 실시간 속보. 저장 안 함.
   final List<FeedItem> feed = [];
 
@@ -107,7 +128,10 @@ class GameSession {
     if (candidates.isEmpty) return null;
     final stock = candidates[_tipRng.nextInt(candidates.length)];
     final realBullish = market.eventEngine.muBonusFor(stock) > 0;
-    final p = (c.reliability + rapportOf(c.id) / 200).clamp(0.0, 0.98);
+    // 피곤하면 귀동냥도 헛듣는다 (최대 -0.1).
+    final fatiguePenalty = (1 - condition / 100) * 0.1;
+    final p = (c.reliability + rapportOf(c.id) / 200 - fatiguePenalty)
+        .clamp(0.0, 0.98);
     final hit = _tipRng.nextDouble() < p;
     final tip = StockTip(
       stockCode: stock.code,
@@ -117,6 +141,17 @@ class GameSession {
     );
     todayTips.add(tip);
     return tip;
+  }
+
+  /// [stock]에 걸린 활성 이벤트의 최대 잔여일. 없으면 null.
+  int? _eventDaysLeftFor(Stock stock) {
+    int? best;
+    for (final e in market.eventEngine.active) {
+      final applies = e.stockCode == stock.code ||
+          (e.sectorId != null && e.sectorId == stock.sectorId);
+      if (applies) best = max(best ?? 0, e.remainingDays);
+    }
+    return best;
   }
 
   String get rankTitle => ranks[rank].title;
@@ -141,6 +176,9 @@ class GameSession {
   void startDay() {
     morningNotices.clear();
     todayTips.clear();
+    // 수면 회복: 취한 채 자면 덜 회복된다.
+    condition = (condition + (drunk ? 20 : 30)).clamp(0, 100);
+    _nightTradePenalized = false;
     drunk = false; // 자고 일어나면 술 깸
     todaySchedule = WorkSchedule.roll(Random(seed ^ (clock.day * 0x9E3779B9)));
     if (clock.day > 1) market.settleOvernight();
@@ -158,14 +196,32 @@ class GameSession {
           '월급날입니다! $rankTitle +${(currentSalary / 10000).round()}만원');
     }
     market.openDay(clock.day);
-    // 친밀도 만렙(100) 동료는 아침마다 정보를 하나 흘려준다.
+    // 친밀도 만렙(100) 동료는 아침마다 정보를 하나 흘려주고, 성향별 보너스도 준다.
     for (final c in kColleagues) {
       if (rapportOf(c.id) < 100) continue;
+      if (c.trait == ColleagueTrait.insider) {
+        // 인싸: 인맥 버프 — 다른 동료 1명과도 가까워진다.
+        final others = [for (final o in kColleagues) if (o.id != c.id) o];
+        final buddy = others[_tipRng.nextInt(others.length)];
+        addRapport(buddy.id, 2);
+        morningNotices
+            .add('🎉 「${c.name}」 덕에 「${buddy.name}」와도 가까워졌다 (친밀도 +2)');
+      } else if (c.trait == ColleagueTrait.workaholic) {
+        // 일벌레: 일을 나눠 가져가 컨디션이 덜 깎인다.
+        condition = (condition + 5).clamp(0, 100);
+        morningNotices.add('💼 「${c.name}」가 업무를 나눠 가져갔다 — 컨디션 +5');
+      }
       final tip = tipFrom(c);
       if (tip == null) continue;
       final stock = market.stockByCode(tip.stockCode);
+      // 투자고수: 이 재료가 언제까지 갈지(잔여일)까지 귀띔해 준다.
+      var extra = '';
+      if (c.trait == ColleagueTrait.investor && stock != null) {
+        final days = _eventDaysLeftFor(stock);
+        if (days != null) extra = ' · D+$days까지 갈 듯';
+      }
       morningNotices.add('🤝 「${c.name}」의 귀띔: ${stock?.name ?? ''} '
-          '${tip.bullish ? '상승 우세' : '하락 우세'} (${tip.reliable ? '정보' : '소문'})');
+          '${tip.bullish ? '상승 우세' : '하락 우세'} (${tip.reliable ? '정보' : '소문'})$extra');
     }
     // 오늘 피드 초기화: 아침 공지 + 오늘 뉴스로 시작(장중엔 실시간 속보가 쌓임).
     feed.clear();
@@ -214,15 +270,26 @@ class GameSession {
   TradeResult buy(Stock stock, int quantity) {
     final blocked = _tradeBlockReason(stock);
     if (blocked != null) return TradeResult.failure(blocked);
-    return portfolio.buy(stock.code, stock.priceKrw, quantity,
+    final r = portfolio.buy(stock.code, stock.priceKrw, quantity,
         day: clock.day, tick: clock.minuteOfDay);
+    if (r.isSuccess) _maybeNightTradeFatigue();
+    return r;
   }
 
   TradeResult sell(Stock stock, int quantity) {
     final blocked = _tradeBlockReason(stock);
     if (blocked != null) return TradeResult.failure(blocked);
-    return portfolio.sell(stock.code, stock.priceKrw, quantity,
+    final r = portfolio.sell(stock.code, stock.priceKrw, quantity,
         day: clock.day, tick: clock.minuteOfDay);
+    if (r.isSuccess) _maybeNightTradeFatigue();
+    return r;
+  }
+
+  /// 심야(미장 시간)에 매매하면 잠이 부족해진다. 하루 1회 -10.
+  void _maybeNightTradeFatigue() {
+    if (_nightTradePenalized || clock.phase != DayPhase.night) return;
+    _nightTradePenalized = true;
+    _spendCondition(10);
   }
 
   /// 매매 불가 사유 문자열(가능하면 null). 장 개장 여부만 본다.
@@ -241,6 +308,7 @@ class GameSession {
         'seed': seed,
         'day': clock.day,
         'rank': rank,
+        'condition': condition,
         'playerName': playerName,
         'avatarId': avatarId,
         'rapport': rapport,
@@ -342,7 +410,9 @@ class GameSession {
     )
       ..rank = (json['rank'] as int?) ?? 0 // 구버전 세이브 하위호환
       ..playerName = (json['playerName'] as String?) ?? ''
-      ..avatarId = (json['avatarId'] as int?) ?? 0;
+      ..avatarId = (json['avatarId'] as int?) ?? 0
+      // 저장은 취침 직후(회복 전) 값 — 아래 startDay()가 회복을 적용한다.
+      ..condition = (json['condition'] as int?) ?? 100;
     // 친밀도 복원 (구버전 세이브엔 없음).
     final rapportJson = json['rapport'] as Map<String, dynamic>?;
     if (rapportJson != null) {

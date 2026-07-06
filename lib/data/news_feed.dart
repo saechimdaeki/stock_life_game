@@ -47,6 +47,41 @@ const List<({String text, int tone, String channel})> _flavor = [
   (text: '외국인·기관 동반 매도... 지수 흔들', tone: -1, channel: '수급'),
 ];
 
+/// 실제 이벤트 방향과 일치하는 힌트 속보 문구(채널 '단독'). {stock} 치환.
+const List<String> _hintGood = [
+  '단독: {stock} 내부 분위기 심상찮다... "위로 본다"',
+  '단독: {stock}에 큰손 자금 유입 정황 포착',
+  '단독: {stock} 호재성 재료 임박설, 관계자 "곧 알게 될 것"',
+  '단독: 기관, {stock} 조용히 모으는 중',
+];
+
+const List<String> _hintBad = [
+  '단독: {stock} 내부서 흉흉한 소문... "미리 피하라"',
+  '단독: {stock} 악재 터지기 직전이라는 제보',
+  '단독: 큰손들 {stock} 물량 정리 중이라는 정황',
+  '단독: {stock} 관계자 "당분간 쳐다보지 마라"',
+];
+
+/// 진행 중인 진짜 이벤트가 걸린 종목의 방향을 흘리는 힌트 속보.
+/// 가격에 추가 영향은 없지만 방향은 진짜 — 피드를 읽을 이유가 생긴다.
+/// 재료(활성 이벤트 종목)가 없으면 null.
+FeedItem? rollHintNews(Random r, Market market, int minute) {
+  final candidates = [
+    for (final s in market.listedStocks)
+      if (market.eventEngine.muBonusFor(s) != 0) s,
+  ];
+  if (candidates.isEmpty) return null;
+  final stock = candidates[r.nextInt(candidates.length)];
+  final bullish = market.eventEngine.muBonusFor(stock) > 0;
+  final pool = bullish ? _hintGood : _hintBad;
+  return FeedItem(
+    minute: minute,
+    text: pool[r.nextInt(pool.length)].replaceAll('{stock}', stock.name),
+    tone: bullish ? 1 : -1,
+    channel: '단독',
+  );
+}
+
 /// 장중 속보 하나를 뽑아 종목/섹터명을 채워 만든다.
 FeedItem rollFlavorNews(Random r, Market market, int minute) {
   final t = _flavor[r.nextInt(_flavor.length)];

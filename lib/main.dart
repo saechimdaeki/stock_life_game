@@ -40,6 +40,14 @@ class StockLifeApp extends StatelessWidget {
         colorSchemeSeed: Colors.teal,
         useMaterial3: true,
       ),
+      // 몰래보기 카운트다운은 Navigator 위에 얹어 어떤 라우트(종목 상세 등)에서도 보인다.
+      builder: (context, child) => Stack(
+        children: [
+          child!,
+          // ponytail: bottom 90 고정 — 셸의 NavigationBar를 피하는 눈대중 오프셋.
+          const Positioned(bottom: 90, left: 8, right: 8, child: _PeekBanner()),
+        ],
+      ),
       home: const _Root(),
     );
   }
@@ -84,7 +92,6 @@ class _MainShellState extends State<MainShell> {
           IndexedStack(index: _index, children: _screens),
           const Positioned(top: 8, left: 8, right: 8, child: _GameAlertBanner()),
           const _InteractionHost(),
-          const Positioned(bottom: 8, left: 8, right: 8, child: _PeekBanner()),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -129,6 +136,7 @@ class _InteractionHostState extends ConsumerState<_InteractionHost> {
       case WorkInteractionKind.smoke:
       case WorkInteractionKind.lunch:
       case WorkInteractionKind.dinner:
+      case WorkInteractionKind.coffee:
         await showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
@@ -138,6 +146,7 @@ class _InteractionHostState extends ConsumerState<_InteractionHost> {
             flavor: switch (interaction.kind) {
               WorkInteractionKind.lunch => ChatFlavor.lunch,
               WorkInteractionKind.dinner => ChatFlavor.dinner,
+              WorkInteractionKind.coffee => ChatFlavor.coffee,
               _ => ChatFlavor.smoke,
             },
           ),
@@ -153,7 +162,8 @@ class _InteractionHostState extends ConsumerState<_InteractionHost> {
   }
 }
 
-/// 회의 몰래보기(30초 매매 찬스) 카운트다운 배너. 어느 탭에서든 하단에 표시.
+/// 회의 몰래보기(30초 매매 찬스) 카운트다운 배너.
+/// MaterialApp.builder에서 Navigator 위에 얹혀 어떤 화면·라우트에서도 보인다.
 class _PeekBanner extends ConsumerWidget {
   const _PeekBanner();
 

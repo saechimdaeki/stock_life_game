@@ -4,7 +4,9 @@ enum ColleagueTrait {
   foodie, // 회식러 — 저녁 회식으로 정보
   gossip, // 정보통 — 신뢰도 높음
   rookie, // 신입 — 신뢰도 낮지만 친해지기 쉬움
-  workaholic, // 일벌레
+  workaholic, // 일벌레 — 친하면 아침 컨디션 보너스
+  insider, // 인싸 — 커피 챗 파트너, 친하면 인맥 버프
+  investor, // 투자고수 — 고신뢰, 친하면 이벤트 잔여일까지 귀띔
 }
 
 extension ColleagueTraitX on ColleagueTrait {
@@ -14,6 +16,8 @@ extension ColleagueTraitX on ColleagueTrait {
         ColleagueTrait.gossip => '👂 정보통',
         ColleagueTrait.rookie => '🐣 신입',
         ColleagueTrait.workaholic => '💼 일벌레',
+        ColleagueTrait.insider => '🎉 인싸',
+        ColleagueTrait.investor => '📈 투자고수',
       };
 }
 
@@ -81,6 +85,18 @@ const List<Colleague> kColleagues = [
       avatarId: 6,
       trait: ColleagueTrait.workaholic,
       reliability: 0.75),
+  Colleague(
+      id: 'han',
+      name: '한사원',
+      avatarId: 3,
+      trait: ColleagueTrait.insider,
+      reliability: 0.55),
+  Colleague(
+      id: 'oh',
+      name: '오차장',
+      avatarId: 7,
+      trait: ColleagueTrait.investor,
+      reliability: 0.93),
 ];
 
 List<Colleague> get kSmokers =>
@@ -88,6 +104,9 @@ List<Colleague> get kSmokers =>
 
 List<Colleague> get kFoodies =>
     [for (final c in kColleagues) if (c.trait == ColleagueTrait.foodie) c];
+
+List<Colleague> get kInsiders =>
+    [for (final c in kColleagues) if (c.trait == ColleagueTrait.insider) c];
 
 /// 근무 중 얻은 종목 정보(팁). 오늘만 유효 — 직렬화하지 않는다.
 class StockTip {

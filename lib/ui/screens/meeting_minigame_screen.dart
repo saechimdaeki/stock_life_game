@@ -68,7 +68,8 @@ class _MeetingMinigameScreenState extends State<MeetingMinigameScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const _MeetingRoomArt(),
+              _MeetingRoomArt(
+                  playerAvatarId: widget.controller.session.avatarId),
               const SizedBox(height: 12),
               _BreakingNews(controller: widget.controller),
               const SizedBox(height: 16),
@@ -93,7 +94,10 @@ class _MeetingMinigameScreenState extends State<MeetingMinigameScreen> {
                 style: const TextStyle(color: Colors.grey, fontSize: 13)),
             const SizedBox(height: 12),
             // 고정 높이 캔버스(스크롤 안전 + 블록부수기 바운드).
-            SizedBox(height: 300, child: _game.build(_onGameResult)),
+            SizedBox(
+                height: 300,
+                child: _game.build(
+                    _onGameResult, widget.controller.session.minigameHandicap)),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -177,7 +181,9 @@ class _CenteredResult extends StatelessWidget {
 /// 회의실 씬. `assets/images/meeting_room.png`가 있으면 그 이미지를 배경으로 쓰고,
 /// 없으면 도형/이모지 플레이스홀더로 폴백한다.
 class _MeetingRoomArt extends StatelessWidget {
-  const _MeetingRoomArt();
+  const _MeetingRoomArt({required this.playerAvatarId});
+
+  final int playerAvatarId;
 
   @override
   Widget build(BuildContext context) {
@@ -186,10 +192,33 @@ class _MeetingRoomArt extends StatelessWidget {
       child: SizedBox(
         height: 150,
         width: double.infinity,
-        child: Image.asset(
-          'assets/images/meeting_room.png',
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stack) => const _MeetingRoomPlaceholder(),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/images/meeting_room.png',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stack) =>
+                  const _MeetingRoomPlaceholder(),
+            ),
+            // 회의실에 앉아 있는 나 (우하단).
+            Positioned(
+              right: 8,
+              bottom: 6,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CharacterAvatar(avatarId: playerAvatarId, size: 40),
+                  const Text('나',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          shadows: [Shadow(blurRadius: 4)])),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -254,10 +283,10 @@ class _MeetingRoomPlaceholder extends StatelessWidget {
               alignment: Alignment.center,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                // 플레이어는 _MeetingRoomArt의 공용 오버레이(우하단 '나')로 그려진다.
                 children: [
                   for (final c in seated)
                     CharacterAvatar(avatarId: c.avatarId, size: 34),
-                  const Text('🙂', style: TextStyle(fontSize: 20)),
                 ],
               ),
             ),
