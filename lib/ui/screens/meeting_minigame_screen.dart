@@ -40,7 +40,7 @@ class _MeetingMinigameScreenState extends State<MeetingMinigameScreen> {
   void _joke() {
     final session = widget.controller.session;
     final from = kColleagues[Random().nextInt(kColleagues.length)];
-    session.addRapport(from.id, 10);
+    session.addRapport(from.id, 4);
     final tip = session.tipFrom(from);
     widget.controller.refresh();
     setState(() {
@@ -142,7 +142,7 @@ class _MeetingMinigameScreenState extends State<MeetingMinigameScreen> {
             : widget.controller.session.market.stockByCode(tip.stockCode);
         return _CenteredResult(
           emoji: '🤭',
-          text: '${_from?.name}와 킥킥 — 친밀도 +10'
+          text: '${_from?.name}와 킥킥 — 친밀도 +4'
               '${tip != null && stock != null ? '\n지나가는 말: ${stock.name} '
                   '${tip.bullish ? '오를 듯 📈' : '빠질 듯 📉'} '
                   '(${tip.reliable ? '정보' : '카더라'})' : ''}',

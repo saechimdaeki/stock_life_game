@@ -71,10 +71,12 @@ class _ColleagueChatSheetState extends State<ColleagueChatSheet> {
         ChatFlavor.coffee => '"주말에 뭐 해?" 수다만 떨다 왔다.',
       };
 
+  /// 친밀도 보상. 회식은 시간·컨디션 대가가 커서 조금 더 준다.
+  int get _gain => widget.flavor == ChatFlavor.dinner ? 6 : 3;
+
   void _join() {
     final session = widget.controller.session;
-    final gain = widget.flavor == ChatFlavor.dinner ? 12 : 8;
-    session.addRapport(widget.colleague.id, gain);
+    session.addRapport(widget.colleague.id, _gain);
     final tip = session.tipFrom(widget.colleague);
     // 회식은 취하고 시간이 훌쩍 지난다(그 대가로 미장 차트가 춤춘다).
     if (widget.flavor == ChatFlavor.dinner) widget.controller.finishDinner();
@@ -140,7 +142,6 @@ class _ColleagueChatSheetState extends State<ColleagueChatSheet> {
 
   Widget _resultBody() {
     final tip = _tip;
-    final gain = widget.flavor == ChatFlavor.dinner ? 12 : 8;
     final stock =
         tip == null ? null : widget.controller.session.market.stockByCode(tip.stockCode);
     return Column(
@@ -149,7 +150,7 @@ class _ColleagueChatSheetState extends State<ColleagueChatSheet> {
         if (tip == null)
           Text(_noTipText, style: const TextStyle(color: Colors.grey))
         else ...[
-          Text('친밀도 +$gain',
+          Text('친밀도 +$_gain',
               style: const TextStyle(color: Colors.teal, fontSize: 13)),
           const SizedBox(height: 8),
           RichText(
