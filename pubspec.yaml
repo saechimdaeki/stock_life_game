@@ -61,6 +61,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # 씬 배경 이미지 등. 파일을 넣으면 자동 반영, 없으면 코드가 플레이스홀더로 폴백.
+  assets:
+    - assets/images/
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

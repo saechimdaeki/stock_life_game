@@ -1,7 +1,12 @@
+import 'dart:math';
+import 'dart:ui' as ui;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/colleague.dart';
+import '../../data/game_session.dart';
 import '../../engine/engine.dart';
 import '../format.dart';
 import '../game_controller.dart';
@@ -61,8 +66,23 @@ class StockDetailScreen extends ConsumerWidget {
                         : ''),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              _TipLine(session: session, code: code),
+              if (session.drunk)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('🍺 취함 — 차트가 춤춘다. 정신 차리고 매매!',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange.shade300,
+                          fontWeight: FontWeight.w600)),
+                ),
               const SizedBox(height: 16),
-              Expanded(child: _PriceChart(stock: stock)),
+              Expanded(
+                child: _DrunkEffect(
+                  drunk: session.drunk,
+                  child: _PriceChart(stock: stock),
+                ),
+              ),
               const SizedBox(height: 16),
               Row(
                 children: [
@@ -125,6 +145,32 @@ class StockDetailScreen extends ConsumerWidget {
   }
 }
 
+/// 동료에게 얻은 정보가 이 종목에 있으면 한 줄 표시.
+class _TipLine extends StatelessWidget {
+  const _TipLine({required this.session, required this.code});
+
+  final GameSession session;
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    StockTip? tip;
+    for (final t in session.todayTips) {
+      if (t.stockCode == code) tip = t;
+    }
+    if (tip == null) return const SizedBox.shrink();
+    final color = tip.bullish ? Colors.redAccent : Colors.blueAccent;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text(
+        '💡 「${tip.fromName}」 ${tip.reliable ? '정보' : '소문'}: '
+        '${tip.bullish ? '상승 우세' : '하락 우세'}',
+        style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
 class _OpenLabel extends StatelessWidget {
   const _OpenLabel({required this.tradable});
 
@@ -144,47 +190,235 @@ class _OpenLabel extends StatelessWidget {
   }
 }
 
-class _PriceChart extends StatelessWidget {
+/// 취했을 때 차트가 춤추듯 흔들리고 흐릿하게 보이는 효과. 취하지 않으면 그대로.
+class _DrunkEffect extends StatefulWidget {
+  const _DrunkEffect({required this.drunk, required this.child});
+
+  final bool drunk;
+  final Widget child;
+
+  @override
+  State<_DrunkEffect> createState() => _DrunkEffectState();
+}
+
+class _DrunkEffectState extends State<_DrunkEffect>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ac;
+
+  @override
+  void initState() {
+    super.initState();
+    _ac = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2600));
+    if (widget.drunk) _ac.repeat();
+  }
+
+  @override
+  void didUpdateWidget(_DrunkEffect old) {
+    super.didUpdateWidget(old);
+    if (widget.drunk && !_ac.isAnimating) {
+      _ac.repeat();
+    } else if (!widget.drunk && _ac.isAnimating) {
+      _ac.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ac.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.drunk) return widget.child;
+    return AnimatedBuilder(
+      animation: _ac,
+      builder: (context, child) {
+        final t = _ac.value * 2 * pi;
+        final dx = sin(t) * 9;
+        final dy = cos(t * 1.3) * 5;
+        final rot = sin(t * 0.8) * 0.05;
+        final scale = 1 + sin(t * 1.7) * 0.02;
+        return Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..translateByDouble(dx, dy, 0, 1)
+            ..rotateZ(rot)
+            ..scaleByDouble(scale, scale, 1, 1),
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: 1.2, sigmaY: 1.2),
+            child: child,
+          ),
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+/// 차트 기간. 당일=오늘 장중 틱, 나머지=일봉(하루 1캔들) N개.
+enum _ChartRange { today, week, month, all }
+
+extension on _ChartRange {
+  String get label => switch (this) {
+        _ChartRange.today => '당일',
+        _ChartRange.week => '1주',
+        _ChartRange.month => '1달',
+        _ChartRange.all => '전체',
+      };
+
+  /// 일봉 뷰에서 보여줄 캔들 수 (당일은 무의미).
+  int get dailyCount => switch (this) {
+        _ChartRange.today => 0,
+        _ChartRange.week => 7,
+        _ChartRange.month => 30,
+        _ChartRange.all => 1 << 30,
+      };
+}
+
+class _PriceChart extends StatefulWidget {
   const _PriceChart({required this.stock});
 
   final Stock stock;
 
   @override
-  Widget build(BuildContext context) {
-    // 일봉 종가 + 오늘 장중 틱을 이어 붙인 라인 차트
-    final values = [...stock.closeHistory, ...stock.tickHistory];
-    if (values.length < 2) {
-      return const Center(
-          child: Text('차트 데이터 수집 중...',
-              style: TextStyle(color: Colors.grey)));
-    }
-    final spots = [
-      for (var i = 0; i < values.length; i++)
-        FlSpot(i.toDouble(), values[i]),
-    ];
-    final isUp = values.last >= values.first;
-    final lineColor = isUp ? Colors.redAccent : Colors.blueAccent;
+  State<_PriceChart> createState() => _PriceChartState();
+}
 
-    return LineChart(
-      LineChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
-        borderData: FlBorderData(show: false),
-        lineTouchData: const LineTouchData(enabled: false),
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: false,
-            dotData: const FlDotData(show: false),
-            color: lineColor,
-            barWidth: 2,
-            belowBarData: BarAreaData(
-              show: true,
-              color: lineColor.withValues(alpha: 0.08),
+class _PriceChartState extends State<_PriceChart> {
+  late _ChartRange _range;
+
+  @override
+  void initState() {
+    super.initState();
+    // 일봉이 쌓였으면 1주 뷰로, 아직이면 당일 뷰로 시작.
+    _range = widget.stock.candleHistory.length >= 2
+        ? _ChartRange.week
+        : _ChartRange.today;
+  }
+
+  /// 오늘 장중 틱을 캔들로 그룹핑 (당일 뷰).
+  /// 그룹당 최소 3틱을 묶어 고가·저가 꼬리(심지)가 생기게 한다.
+  static List<Candle> _intradayCandles(List<double> ticks) {
+    if (ticks.length < 3) return const [];
+    final groupSize = (ticks.length / 16).ceil().clamp(3, ticks.length).toInt();
+    final result = <Candle>[];
+    for (var i = 0; i < ticks.length; i += groupSize) {
+      final end = (i + groupSize).clamp(0, ticks.length).toInt();
+      final slice = ticks.sublist(i, end);
+      var hi = slice.first, lo = slice.first;
+      for (final p in slice) {
+        if (p > hi) hi = p;
+        if (p < lo) lo = p;
+      }
+      result.add(Candle(
+          open: slice.first, high: hi, low: lo, close: slice.last));
+    }
+    return result;
+  }
+
+  List<Candle> _candles() {
+    final stock = widget.stock;
+    if (_range == _ChartRange.today) {
+      return _intradayCandles(stock.tickHistory);
+    }
+    final daily = [
+      ...stock.candleHistory,
+      if (stock.formingCandle != null) stock.formingCandle!,
+    ];
+    final n = _range.dailyCount;
+    return daily.length > n ? daily.sublist(daily.length - n) : daily;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<_ChartRange>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
             ),
+            segments: [
+              for (final r in _ChartRange.values)
+                ButtonSegment(value: r, label: Text(r.label)),
+            ],
+            selected: {_range},
+            onSelectionChanged: (s) => setState(() => _range = s.first),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(child: _buildChart()),
+      ],
+    );
+  }
+
+  Widget _buildChart() {
+    final candles = _candles();
+    if (candles.length < 2) {
+      return Center(
+        child: Text(
+          _range == _ChartRange.today ? '장중 데이터 수집 중...' : '아직 일봉이 부족합니다',
+          style: const TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+    // 각 봉의 시가를 직전 봉 종가에 맞춰 이어붙여 끊김 없이 보이게 한다.
+    final spots = <CandlestickSpot>[];
+    for (var i = 0; i < candles.length; i++) {
+      final c = candles[i];
+      final open = i == 0 ? c.open : candles[i - 1].close;
+      spots.add(CandlestickSpot(
+        x: i.toDouble(),
+        open: open,
+        high: c.high > open ? c.high : open,
+        low: c.low < open ? c.low : open,
+        close: c.close,
+      ));
+    }
+    // 위아래 5% 여백을 둬서 꼬리가 잘리지 않게 한다.
+    var hi = spots.first.high, lo = spots.first.low;
+    for (final s in spots) {
+      if (s.high > hi) hi = s.high;
+      if (s.low < lo) lo = s.low;
+    }
+    final pad = (hi - lo) * 0.05 + 1;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 몸통 폭을 실제 슬롯 폭에 비례시켜 화면을 꽉 채운다 (띄엄띄엄 방지).
+        final slot = constraints.maxWidth / candles.length;
+        final bodyWidth = (slot * 0.62).clamp(2.0, 40.0);
+        CandlestickStyle styleFor(CandlestickSpot spot, int _) {
+          final color = spot.isUp ? Colors.redAccent : Colors.blueAccent;
+          return CandlestickStyle(
+            lineColor: color,
+            lineWidth: 1.5,
+            bodyStrokeColor: color,
+            bodyStrokeWidth: 1,
+            bodyFillColor: color,
+            bodyWidth: bodyWidth,
+            bodyRadius: 1,
+          );
+        }
+
+        return CandlestickChart(
+          CandlestickChartData(
+            candlestickSpots: spots,
+            minY: lo - pad,
+            maxY: hi + pad,
+            candlestickPainter:
+                DefaultCandlestickPainter(candlestickStyleProvider: styleFor),
+            gridData: const FlGridData(show: false),
+            titlesData: const FlTitlesData(show: false),
+            borderData: FlBorderData(show: false),
+            candlestickTouchData: CandlestickTouchData(enabled: false),
+          ),
+        );
+      },
     );
   }
 }

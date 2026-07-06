@@ -124,24 +124,49 @@ class Market {
   }
 
   void _moveStocks(List<Stock> targets, {bool recordTicks = false}) {
-    final sectorZ = {
-      for (final sector in kSectors) sector.id: priceEngine.nextGaussian(),
-    };
+    // 차트 표시용(recordTicks) 세션 틱은 마이크로 스텝으로 잘게 그려 부드럽게 잇는다.
+    // 오버나이트 정산 등 비표시 이동은 1스텝(기존과 동일)으로 유지한다.
+    final steps = recordTicks ? priceEngine.microSteps : 1;
 
-    for (final stock in targets) {
-      final factor = priceEngine.tickFactor(
-        mu: _dayMu[stock.code] ?? stock.baseMu,
-        sigma: _daySigma[stock.code] ?? stock.baseSigma,
-        sectorZ: sectorZ[stock.sectorId]!,
-        rho: sectorOf(stock.sectorId).correlation,
-      );
-      stock.price = max(stock.price * factor, _minPriceOf(stock));
-      if (recordTicks) stock.recordTick();
+    for (var st = 0; st < steps; st++) {
+      final sectorZ = {
+        for (final sector in kSectors) sector.id: priceEngine.nextGaussian(),
+      };
+      for (final stock in targets) {
+        final factor = priceEngine.tickFactor(
+          mu: _dayMu[stock.code] ?? stock.baseMu,
+          sigma: _daySigma[stock.code] ?? stock.baseSigma,
+          sectorZ: sectorZ[stock.sectorId]!,
+          rho: sectorOf(stock.sectorId).correlation,
+          steps: steps,
+        );
+        stock.price = max(stock.price * factor, _minPriceOf(stock));
+      }
+      if (recordTicks) {
+        for (final stock in targets) {
+          stock.recordTick();
+        }
+      }
     }
   }
 
   double _minPriceOf(Stock stock) =>
       stock.exchangeId == ExchangeId.us ? minPriceUs : minPriceKrx;
+
+  /// 현재 진행 중인 가장 강한 이벤트의 속보(헤드라인+호악재). 없으면 null.
+  /// 회의 중 "폭락 중입니다" 같은 실시간 속보용 (오늘 뉴스가 아닌 활성 이벤트 기준).
+  ({String headline, bool good})? breakingEvent() {
+    ActiveEvent? best;
+    for (final e in eventEngine.active) {
+      if (e.spec.effect.muBonus.abs() < 0.4) continue;
+      if (best == null ||
+          e.spec.effect.muBonus.abs() > best.spec.effect.muBonus.abs()) {
+        best = e;
+      }
+    }
+    if (best == null) return null;
+    return (headline: _toNews(best).headline, good: best.spec.isGood);
+  }
 
   NewsItem _toNews(ActiveEvent event) {
     final stock =

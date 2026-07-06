@@ -21,20 +21,36 @@ void main() {
       expect(session.market.stocks.first.tickHistory, isNotEmpty);
     });
 
-    test('30일마다 월급이 들어온다', () {
+    test('새 게임은 초반 차트용 과거 일봉을 합성해 채운다', () {
+      final s = GameSession.newGame(seed: 7).market.stocks.first;
+      expect(s.candleHistory.length, greaterThanOrEqualTo(2));
+      // 마지막 합성 일봉 종가가 현재가로 이어져야 차트가 자연스럽다.
+      expect(s.candleHistory.last.close, closeTo(s.price, 0.01));
+      // 캔들 무결성: 꼬리가 몸통을 감싼다.
+      for (final c in s.candleHistory) {
+        expect(c.high, greaterThanOrEqualTo(c.open));
+        expect(c.high, greaterThanOrEqualTo(c.close));
+        expect(c.low, lessThanOrEqualTo(c.open));
+        expect(c.low, lessThanOrEqualTo(c.close));
+      }
+    });
+
+    test('30일마다 월급, 60일마다 승진하며 월급이 오른다', () {
       final session = GameSession.newGame(seed: 2);
 
-      var salaryCount = 0;
+      double? day30Delta, day60Delta;
       for (var i = 0; i < 60; i++) {
         final before = session.portfolio.cash;
         playThroughDay(session);
         final delta = session.portfolio.cash - before;
-        if (session.morningNotices.isNotEmpty) {
-          salaryCount++;
-          expect(delta, GameSession.monthlySalary);
-        }
+        if (session.clock.day == 30) day30Delta = delta;
+        if (session.clock.day == 60) day60Delta = delta;
       }
-      expect(salaryCount, 2); // 30일차, 60일차
+      // 30일차: 사원 월급
+      expect(day30Delta, GameSession.ranks[0].salary);
+      // 60일차: 주임으로 승진 후 오른 월급
+      expect(session.rank, 1);
+      expect(day60Delta, GameSession.ranks[1].salary);
     });
 
     test('장이 닫힌 시각의 매매는 거부된다', () {
@@ -45,7 +61,7 @@ void main() {
       final result = session.buy(krStock, 1);
       expect(result.isSuccess, isFalse);
 
-      // 근무시간까지 진행 - 국장 개장
+      // 국장 개장(09:00) 후에는 근무 중이어도 매매 가능
       while (session.clock.minuteOfDay < 9 * 60) {
         session.advanceTick();
       }

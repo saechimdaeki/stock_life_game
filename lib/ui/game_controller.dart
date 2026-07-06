@@ -1,11 +1,26 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../data/colleague.dart';
 import '../data/game_session.dart';
+import '../data/news_feed.dart';
 import '../data/save_repository.dart';
+import '../engine/engine.dart';
+
+/// 근무 블록 진입 시 뜨는 인터랙션 종류.
+enum WorkInteractionKind { meeting, smoke, lunch, dinner }
+
+/// 대기 중인 근무 인터랙션 (UI가 감지해 모달로 띄운다).
+class WorkInteraction {
+  const WorkInteraction(this.kind, {this.colleague});
+
+  final WorkInteractionKind kind;
+  final Colleague? colleague; // 담배타임 상대
+}
 
 /// 하루 흐름 단계 (UI 표시용).
 enum DayStage {
@@ -44,11 +59,26 @@ class GameController extends ChangeNotifier {
   Timer? _ticker;
   bool get isPlaying => _ticker != null;
 
-  /// 배속: 1x = 600ms/틱.
+  /// 하루가 처음부터 끝까지 끊김 없이 흐른다(1x=1500ms/틱). 빨리감기·스킵 없음.
+  /// 급하면 일시정지, 배속은 유저가 직접 고른다.
   int speed = 1;
-  static const _baseTickMs = 600;
+  static const _tickMs = 2500;
 
-  /// 아침 브리핑 종료, 하루 자동 진행 시작.
+  /// 좌상단 팝업 알림(장 개장 등). [alertSeq]가 바뀌면 새 알림.
+  String? alert;
+  int alertSeq = 0;
+
+  /// 대기 중인 근무 인터랙션. null이 아니면 하루가 멈춰 있고 UI가 모달을 띄운다.
+  WorkInteraction? pending;
+  int _lastBlockStart = -1; // 블록당 1회만 트리거
+  int _dinnerDay = -1; // 저녁 회식은 하루 1회
+  final Random _rng = Random();
+
+  /// 회의 몰래보기 남은 초. >0이면 하루가 멈춘 채 자유 매매 찬스(시간 정지).
+  int peekSecondsLeft = 0;
+  Timer? _peekTimer;
+
+  /// 아침 브리핑 종료, 하루 진행 자동 시작(계속 흐름).
   void startDay() {
     if (_stage != DayStage.morning) return;
     _stage = DayStage.running;
@@ -57,11 +87,17 @@ class GameController extends ChangeNotifier {
 
   void play() {
     if (_stage != DayStage.running || isPlaying) return;
+    _startTicker();
+    notifyListeners();
+  }
+
+  void _startTicker() {
+    _ticker?.cancel();
+    final interval = (_tickMs ~/ speed).clamp(1, _tickMs).toInt();
     _ticker = Timer.periodic(
-      Duration(milliseconds: _baseTickMs ~/ speed),
+      Duration(milliseconds: interval),
       (_) => _onTick(),
     );
-    notifyListeners();
   }
 
   void pause() {
@@ -72,24 +108,154 @@ class GameController extends ChangeNotifier {
 
   void setSpeed(int value) {
     speed = value;
-    if (isPlaying) {
-      pause();
-      play();
-    } else {
-      notifyListeners();
-    }
+    if (isPlaying) _startTicker();
+    notifyListeners();
   }
 
   void _onTick() {
-    var hasMore = _session.advanceTick();
-    // 장이 닫힌 시간대(아침·저녁)는 자동으로 빠르게 건너뛴다
-    while (hasMore && !_session.anyExchangeOpen) {
-      hasMore = _session.advanceTick();
-    }
+    final beforeMin = _session.clock.minuteOfDay;
+    final hasMore = _session.advanceTick();
     if (!hasMore) {
       pause();
       _stage = DayStage.dayOver;
+      notifyListeners();
+      return;
     }
+    _maybeAlertOnOpen(beforeMin, _session.clock.minuteOfDay);
+    _maybePushNews();
+    _maybeTriggerInteraction();
+    notifyListeners();
+  }
+
+  /// 출근 후(아침 이후) 장중에 텔레그램 속보를 간간히 올린다.
+  void _maybePushNews() {
+    if (_session.clock.phase == DayPhase.morning) return;
+    if (_rng.nextDouble() < 0.28) {
+      _session.pushNews(
+          rollFlavorNews(_rng, _session.market, _session.clock.minuteOfDay));
+    }
+  }
+
+  /// 근무 블록에 새로 진입하면 회의(미니게임)·상사외근(담배타임) 인터랙션을 띄운다.
+  void _maybeTriggerInteraction() {
+    if (pending != null) return;
+    final clock = _session.clock;
+    // 저녁: 회식러 동료가 회식에 부른다(하루 1회, 확률적). 죽은 저녁시간 채우기.
+    if (clock.phase == DayPhase.evening) {
+      if (_dinnerDay != clock.day && kFoodies.isNotEmpty) {
+        _dinnerDay = clock.day;
+        if (_rng.nextDouble() < 0.6) {
+          final c = kFoodies[_rng.nextInt(kFoodies.length)];
+          pending = WorkInteraction(WorkInteractionKind.dinner, colleague: c);
+          pause();
+        }
+      }
+      return;
+    }
+    if (clock.phase != DayPhase.work) {
+      _lastBlockStart = -1;
+      return;
+    }
+    final block = _session.todaySchedule.blockAt(clock.minuteOfDay);
+    if (block == null || block.startMin == _lastBlockStart) return;
+    _lastBlockStart = block.startMin; // 이 블록은 처리 완료(재트리거 방지)
+    switch (block.kind) {
+      case WorkBlockKind.meeting:
+        pending = const WorkInteraction(WorkInteractionKind.meeting);
+        pause();
+      case WorkBlockKind.bossAway:
+        // 흡연 동료와 담배타임 (스팸 방지: 확률적으로만).
+        if (_rng.nextDouble() < 0.6) {
+          final c = kSmokers[_rng.nextInt(kSmokers.length)];
+          pending = WorkInteraction(WorkInteractionKind.smoke, colleague: c);
+          pause();
+        }
+      case WorkBlockKind.lunch:
+        // 점심 식사: 아무 동료와 대화 → 정보. 하루 1회(점심 블록 고정).
+        final c = kColleagues[_rng.nextInt(kColleagues.length)];
+        pending = WorkInteraction(WorkInteractionKind.lunch, colleague: c);
+        pause();
+      case WorkBlockKind.focus:
+      case WorkBlockKind.report:
+        break;
+    }
+  }
+
+  /// 인터랙션 종료(보상은 UI가 세션에 직접 적용). 몰래보기 중이면 재개하지 않는다.
+  void resolveInteraction() {
+    pending = null;
+    if (_stage == DayStage.running && peekSecondsLeft == 0) play();
+    notifyListeners();
+  }
+
+  /// 회식 후: 취하고, 시간이 훌쩍 지난다(미장 개장 무렵까지 시세 시뮬).
+  /// 인터랙션 해제는 UI가 시트를 닫을 때 [resolveInteraction]로 처리.
+  void finishDinner() {
+    _session.drunk = true;
+    // 회식하느라 밤 늦게(미장 개장 직후)까지 시간이 흘러 있다.
+    const target = GameClock.nightStartMinute + 30; // 24:00 무렵
+    while (_session.clock.minuteOfDay < target) {
+      if (!_session.advanceTick()) {
+        _stage = DayStage.dayOver;
+        break;
+      }
+    }
+    notifyListeners();
+  }
+
+  /// 회의 미니게임 성공 보상: [seconds]초 동안 시간을 멈춘 채 자유 매매.
+  /// 카운트다운이 끝나면 하루가 다시 흐른다.
+  void startPeek({int seconds = 30}) {
+    peekSecondsLeft = seconds;
+    _peekTimer?.cancel();
+    _peekTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      peekSecondsLeft -= 1;
+      if (peekSecondsLeft <= 0) {
+        peekSecondsLeft = 0;
+        _peekTimer?.cancel();
+        _peekTimer = null;
+        if (_stage == DayStage.running) play();
+      }
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
+  /// 거래소가 방금 개장했으면 좌상단 팝업 알림.
+  void _maybeAlertOnOpen(int before, int now) {
+    if (!kKrxExchange.isOpenAt(before) && kKrxExchange.isOpenAt(now)) {
+      alert = '🔔 국장 개장! 매매 가능';
+      alertSeq++;
+    } else if (!kUsExchange.isOpenAt(before) && kUsExchange.isOpenAt(now)) {
+      alert = '🌙 미장 개장! 매매 가능';
+      alertSeq++;
+    }
+  }
+
+  /// 장이 닫혀 있으면 다음 개장 시각까지 빠르게 건너뛰고 정상 흐름 재개.
+  /// (개장 중엔 스킵할 게 없으므로 무시.)
+  void skipToNextOpen() {
+    if (_stage != DayStage.running || _session.anyExchangeOpen) return;
+    pause();
+    while (true) {
+      final before = _session.clock.minuteOfDay;
+      if (!_session.advanceTick()) {
+        _stage = DayStage.dayOver;
+        notifyListeners();
+        return;
+      }
+      _maybeAlertOnOpen(before, _session.clock.minuteOfDay);
+      if (_session.anyExchangeOpen) break;
+    }
+    play(); // 개장 도달 -> 정상 흐름 재개
+  }
+
+  /// 남은 하루를 즉시 진행해 정산 화면으로 넘어간다.
+  void skipToDayEnd() {
+    if (_stage != DayStage.running) return;
+    pause();
+    while (_session.advanceTick()) {}
+    _stage = DayStage.dayOver;
     notifyListeners();
   }
 
@@ -100,6 +266,14 @@ class GameController extends ChangeNotifier {
     await _persist();
     _session.startDay();
     _stage = DayStage.morning;
+    notifyListeners();
+  }
+
+  /// 캐릭터 생성 화면에서 이름·아바타 확정.
+  Future<void> setIdentity(String name, int avatarId) async {
+    _session.playerName = name;
+    _session.avatarId = avatarId;
+    await _persist();
     notifyListeners();
   }
 
@@ -121,6 +295,7 @@ class GameController extends ChangeNotifier {
   @override
   void dispose() {
     _ticker?.cancel();
+    _peekTimer?.cancel();
     super.dispose();
   }
 }

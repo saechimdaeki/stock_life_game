@@ -4,6 +4,7 @@
 library;
 
 export 'clock/game_clock.dart';
+export 'clock/work_schedule.dart';
 export 'events/event_engine.dart';
 export 'events/event_table.dart';
 export 'events/game_event.dart';

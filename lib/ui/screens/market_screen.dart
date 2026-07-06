@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/colleague.dart';
 import '../../engine/engine.dart';
 import '../format.dart';
 import '../game_controller.dart';
@@ -14,6 +15,7 @@ class MarketScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.watch(gameControllerProvider);
     final session = controller.session;
+    final tipByCode = {for (final t in session.todayTips) t.stockCode: t};
 
     return DefaultTabController(
       length: kExchanges.length,
@@ -44,6 +46,7 @@ class MarketScreen extends ConsumerWidget {
                   for (final exchange in kExchanges)
                     _StockList(
                       stocks: session.market.listedOn(exchange.id),
+                      tipByCode: tipByCode,
                     ),
                 ],
               ),
@@ -76,10 +79,34 @@ class _OpenBadge extends StatelessWidget {
   }
 }
 
+/// 동료에게 얻은 정보 배지 (상승=빨강/하락=파랑, 소문은 옅게).
+class _TipBadge extends StatelessWidget {
+  const _TipBadge({required this.tip});
+
+  final StockTip tip;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = tip.bullish ? Colors.redAccent : Colors.blueAccent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: base.withValues(alpha: tip.reliable ? 0.35 : 0.18),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        '💡${tip.bullish ? '▲' : '▼'}${tip.reliable ? '' : '?'}',
+        style: TextStyle(fontSize: 11, color: base),
+      ),
+    );
+  }
+}
+
 class _StockList extends StatelessWidget {
-  const _StockList({required this.stocks});
+  const _StockList({required this.stocks, required this.tipByCode});
 
   final List<Stock> stocks;
+  final Map<String, StockTip> tipByCode;
 
   @override
   Widget build(BuildContext context) {
@@ -92,8 +119,17 @@ class _StockList extends StatelessWidget {
         final color = rate > 0
             ? Colors.redAccent
             : (rate < 0 ? Colors.blueAccent : Colors.grey);
+        final tip = tipByCode[stock.code];
         return ListTile(
-          title: Text(stock.name),
+          title: Row(
+            children: [
+              Flexible(child: Text(stock.name)),
+              if (tip != null) ...[
+                const SizedBox(width: 6),
+                _TipBadge(tip: tip),
+              ],
+            ],
+          ),
           subtitle: Text(sectorOf(stock.sectorId).nameKo,
               style: const TextStyle(fontSize: 12)),
           trailing: Column(

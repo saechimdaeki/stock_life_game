@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_life_game/data/save_repository.dart';
@@ -17,6 +18,13 @@ void main() {
         child: const StockLifeApp(),
       ),
     );
+
+    // 첫 실행: 캐릭터 생성 화면 -> 이름 입력 후 시작.
+    expect(find.text('캐릭터 만들기'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '김주식');
+    await tester.pump();
+    await tester.tap(find.text('시작하기'));
+    await tester.pumpAndSettle();
 
     expect(find.text('Day 1'), findsOneWidget);
     expect(find.text('하루 시작'), findsOneWidget);

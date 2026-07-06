@@ -11,7 +11,8 @@ class PriceEngine {
     required this._random,
     this.ticksPerDay = 26,
     this.daysPerYear = 240,
-  });
+    this.microSteps = 1,
+  }) : assert(microSteps >= 1);
 
   final Random _random;
 
@@ -20,6 +21,10 @@ class PriceEngine {
 
   /// 게임 내 1년 = 240 거래일 기준으로 연환산 파라미터를 환산.
   final int daysPerYear;
+
+  /// 한 클럭틱(15분)을 몇 번으로 잘게 나눠 그릴지. 차트를 부드럽게 이어준다.
+  /// 클럭틱당 총 변동 분포는 동일하게 유지된다(각 마이크로 스텝 dt = dt/microSteps).
+  final int microSteps;
 
   double get dt => 1.0 / (daysPerYear * ticksPerDay);
 
@@ -52,9 +57,12 @@ class PriceEngine {
     required double sigma,
     required double sectorZ,
     required double rho,
+    int steps = 1,
   }) {
+    final stepDt = dt / steps;
     final z = sqrt(rho) * sectorZ + sqrt(1.0 - rho) * nextGaussian();
-    final logReturn = (mu - 0.5 * sigma * sigma) * dt + sigma * sqrt(dt) * z;
+    final logReturn =
+        (mu - 0.5 * sigma * sigma) * stepDt + sigma * sqrt(stepDt) * z;
     return exp(logReturn);
   }
 }
