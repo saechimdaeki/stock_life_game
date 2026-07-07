@@ -244,6 +244,15 @@ class GameSession {
         }
       }
     }
+    // 정기 매크로 일정 예고 (D-3부터).
+    for (final entry in kMacroSchedule) {
+      final daysUntil = (entry.offset - clock.day % kMacroCycleDays +
+              kMacroCycleDays) %
+          kMacroCycleDays;
+      if (daysUntil >= 1 && daysUntil <= 3) {
+        morningNotices.add('📅 D-$daysUntil ${entry.label} — 변동성 주의');
+      }
+    }
     final fxBefore = market.usdKrw;
     market.openDay(clock.day);
     // 환율이 크게 움직였으면 공지.
@@ -398,6 +407,11 @@ class GameSession {
               'sectorId': e.sectorId?.name,
             },
         ],
+        // 만료됐지만 아직 해소 안 된 루머 후속 (다음 아침에 확정/무산).
+        'pendingFollowUps': [
+          for (final m in market.eventEngine.pendingFollowUps)
+            {'specId': m.specId, 'stockCode': m.stockCode},
+        ],
       };
 
   /// 저장 데이터로 세션을 복원한다. 복원 직후 아침 상태([startDay] 완료)가 된다.
@@ -449,6 +463,14 @@ class GameSession {
             ? null
             : SectorId.values.byName(sectorName),
       )..remainingDays = map['remainingDays'] as int);
+    }
+    // 미해소 루머 후속 복원 (구세이브엔 없음).
+    for (final item in (json['pendingFollowUps'] as List?) ?? const []) {
+      final map = (item as Map).cast<String, dynamic>();
+      eventEngine.pendingFollowUps.add((
+        specId: map['specId'] as String,
+        stockCode: map['stockCode'] as String?,
+      ));
     }
 
     final portfolio = Portfolio(initialCash: initialCash)

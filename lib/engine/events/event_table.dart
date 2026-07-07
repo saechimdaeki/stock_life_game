@@ -104,7 +104,7 @@ const List<EventSpec> kEventTable = [
     id: 'fomc_hawkish',
     scope: EventScope.exchange,
     exchangeId: ExchangeId.us,
-    weight: 4,
+    weight: 0, // 정기 일정(kMacroSchedule) 전용
     headline: '파월 의장 "굿 애프터눈"... 매파 발언에 미장 긴장',
     effect: EventEffect(jump: 0.96, muBonus: -0.30, sigmaMult: 1.3, durationDays: 5),
   ),
@@ -112,7 +112,7 @@ const List<EventSpec> kEventTable = [
     id: 'fomc_dovish',
     scope: EventScope.exchange,
     exchangeId: ExchangeId.us,
-    weight: 4,
+    weight: 0, // 정기 일정(kMacroSchedule) 전용
     headline: '파월 의장 "굿 애프터눈"... 금리 인하 시사에 미장 환호',
     effect: EventEffect(jump: 1.04, muBonus: 0.30, durationDays: 5),
   ),
@@ -120,7 +120,7 @@ const List<EventSpec> kEventTable = [
     id: 'us_cpi_hot',
     scope: EventScope.exchange,
     exchangeId: ExchangeId.us,
-    weight: 4,
+    weight: 0, // 정기 일정(kMacroSchedule) 전용
     headline: '미국 CPI 예상치 상회... 인플레 공포 재점화',
     effect: EventEffect(jump: 0.95, muBonus: -0.25, durationDays: 3),
   ),
@@ -131,6 +131,16 @@ const List<EventSpec> kEventTable = [
     weight: 4,
     headline: '미국 고용지표 서프라이즈... 경기 연착륙 기대',
     effect: EventEffect(jump: 1.05, muBonus: 0.25, durationDays: 3),
+  ),
+  // us_jobs_strong의 악재 카운터파트 — 랜덤 풀 호악재 대칭 유지용.
+  // (CPI/FOMC를 정기 일정 전용 weight 0으로 빼면서 깨진 균형을 복원)
+  EventSpec(
+    id: 'us_jobs_weak',
+    scope: EventScope.exchange,
+    exchangeId: ExchangeId.us,
+    weight: 4,
+    headline: '미국 고용 쇼크... 경기 침체 우려 확산',
+    effect: EventEffect(jump: 0.95, muBonus: -0.25, durationDays: 3),
   ),
   EventSpec(
     id: 'kr_export_boom',
@@ -193,9 +203,11 @@ const List<EventSpec> kEventTable = [
   EventSpec(
     id: 'ma_collapse',
     scope: EventScope.stock,
-    weight: 2,
+    weight: 0, // ma_rumor 후속(kFollowUps) 전용
     headline: '{stock} 인수 협상 결렬... 기대감 소멸',
-    effect: EventEffect(jump: 0.91, muBonus: -0.50, sigmaMult: 1.3, durationDays: 4),
+    // 루머 기간에 펌핑된 상승분을 반납하는 깊이 — 체인 기대값을 0 근처로 유지.
+    // (ln1.10 + 0.3·ln1.22 + 0.7·ln0.80 ≈ 0, simulation_test로 검증)
+    effect: EventEffect(jump: 0.80, muBonus: -0.50, sigmaMult: 1.3, durationDays: 4),
   ),
   EventSpec(
     id: 'buyback',
@@ -329,8 +341,46 @@ const List<EventSpec> kEventTable = [
     headline: '{stock}, 실적 발표 앞두고 관망세... 눈치보기',
     effect: EventEffect(sigmaMult: 1.5, durationDays: 2),
   ),
+  // ---- 2단계 루머 후속 (weight 0 — 랜덤 추첨 안 됨, kFollowUps로만 발생) ----
+  EventSpec(
+    id: 'ma_confirmed',
+    scope: EventScope.stock,
+    weight: 0,
+    headline: '{stock} 인수 확정! 경영권 프리미엄 현실화',
+    effect: EventEffect(jump: 1.22, muBonus: 0.30, durationDays: 2),
+  ),
+
+  // ---- 정기 매크로 짝 (weight 0 — kMacroSchedule로만 발생) ----
+  EventSpec(
+    id: 'us_cpi_cool',
+    scope: EventScope.exchange,
+    exchangeId: ExchangeId.us,
+    weight: 0,
+    headline: '미국 CPI 예상치 하회... 인플레 진정에 안도 랠리',
+    effect: EventEffect(jump: 1.05, muBonus: 0.25, durationDays: 3),
+  ),
 ];
 
 /// 하루에 발생하는 이벤트 개수 분포 (인덱스 = 개수, 값 = 확률).
-/// 기대값 약 0.9건/일 - 목표 밴드 0.5~1.5건.
-const List<double> kDailyEventCountDist = [0.35, 0.45, 0.15, 0.05];
+/// 기대값 약 1.2건/일 (0건인 날 20%) - 목표 밴드 0.9~1.8건.
+/// ⚠️ 상향 시 몬테카를로 중앙값이 롱테일로 폭주하지 않는지 반드시 재검증.
+const List<double> kDailyEventCountDist = [0.20, 0.50, 0.20, 0.10];
+
+/// 루머 이벤트가 만료되면 다음 날 아침 후속 이벤트로 해소된다.
+/// pGood 확률로 good, 아니면 bad — 같은 종목 대상.
+const Map<String, ({String goodId, String badId, double pGood})> kFollowUps = {
+  // M&A 루머는 대부분 무산된다 — 낚이면 펌핑분을 반납. 성공하면 잭팟.
+  'ma_rumor': (goodId: 'ma_confirmed', badId: 'ma_collapse', pGood: 0.3),
+};
+
+/// 정기 매크로 일정: day % [kMacroCycleDays] == offset인 아침에
+/// good/bad 중 하나가 확정 발생한다 (D-3부터 피드 예고).
+const int kMacroCycleDays = 30;
+const List<({int offset, String label, String goodId, String badId})>
+    kMacroSchedule = [
+  (offset: 10, label: '미국 CPI 발표', goodId: 'us_cpi_cool', badId: 'us_cpi_hot'),
+  (offset: 20, label: 'FOMC 금리 결정', goodId: 'fomc_dovish', badId: 'fomc_hawkish'),
+];
+
+/// 장중 돌발 이벤트(종목 단위) 발생 확률 — 개장 중 틱당 (~0.25건/일).
+const double kIntradayEventChance = 0.007;

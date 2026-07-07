@@ -101,8 +101,10 @@ void main() {
           '${(avgCollapseRate * 100).toStringAsFixed(1)}%');
 
       // --- 밸런스 어서션 (넉넉한 밴드) ---
-      expect(avgEventRate, greaterThan(0.5));
-      expect(avgEventRate, lessThan(1.5));
+      // 기대값: 랜덤 ~1.2 + 정기 매크로 2/30 + 루머 후속 ≈ 1.3건/일.
+      // (장중 돌발 ~0.25건/일은 todaysNews에 안 잡히므로 별도)
+      expect(avgEventRate, greaterThan(0.9));
+      expect(avgEventRate, lessThan(1.8));
 
       // 1,000일 ≈ 게임 내 4.2년. 분산투자 기대수익이 양수이되
       // 아무 조작 없이 수 배가 되는 인플레 밸런스는 아님을 확인.

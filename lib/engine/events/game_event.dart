@@ -38,7 +38,8 @@ class EventSpec {
     required this.headline,
     required this.effect,
     this.exchangeId,
-  })  : assert(weight > 0),
+  })  : // weight 0 = 랜덤 추첨 제외 (정기 일정·루머 후속 전용 스펙).
+        assert(weight >= 0),
         assert(scope != EventScope.exchange || exchangeId != null);
 
   final String id;

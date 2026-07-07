@@ -22,7 +22,18 @@ class EventEngine {
 
   final List<ActiveEvent> active = [];
 
-  /// 아침 추첨. 새로 발생한 이벤트를 반환하고 active에 등록한다.
+  /// 만료된 루머의 미해결 후속 (다음 날 아침 확정/무산으로 해소). 저장됨.
+  final List<({String specId, String? stockCode})> pendingFollowUps = [];
+
+  EventSpec? _specById(String id) {
+    for (final s in _specs) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
+
+  /// 아침 추첨: ①루머 후속 해소 ②정기 매크로 일정 ③랜덤 추첨.
+  /// 새로 발생한 이벤트를 반환하고 active에 등록한다.
   /// 점프 적용은 Market 책임 (엔진은 효과 데이터만 관리).
   List<ActiveEvent> rollMorning({
     required int day,
@@ -30,6 +41,38 @@ class EventEngine {
   }) {
     final rolled = <ActiveEvent>[];
     if (_specs.isEmpty) return rolled;
+
+    // ① 어제 만료된 루머 → 확정/무산 후속 (같은 종목).
+    for (final marker in pendingFollowUps) {
+      final fu = kFollowUps[marker.specId];
+      if (fu == null) continue;
+      final spec =
+          _specById(_random.nextDouble() < fu.pGood ? fu.goodId : fu.badId);
+      if (spec == null) continue;
+      // 그 사이 상장폐지됐으면 후속 없음.
+      if (marker.stockCode != null &&
+          !listedStocks.any((s) => s.code == marker.stockCode)) {
+        continue;
+      }
+      final event =
+          ActiveEvent(spec: spec, startDay: day, stockCode: marker.stockCode);
+      active.add(event);
+      rolled.add(event);
+    }
+    pendingFollowUps.clear();
+
+    // ② 정기 매크로 일정 (CPI·FOMC — 방향은 당일 50/50).
+    for (final entry in kMacroSchedule) {
+      if (day % kMacroCycleDays != entry.offset) continue;
+      final spec = _specById(
+          _random.nextBool() ? entry.goodId : entry.badId);
+      if (spec == null) continue;
+      final event = ActiveEvent(spec: spec, startDay: day);
+      active.add(event);
+      rolled.add(event);
+    }
+
+    // ③ 랜덤 추첨.
     final count = _rollDailyCount();
     for (var i = 0; i < count; i++) {
       final spec = _pickSpec();
@@ -41,10 +84,45 @@ class EventEngine {
     return rolled;
   }
 
+  /// 장중 돌발 이벤트: [chance] 확률로 종목 단위 이벤트 하나를 즉시 발생.
+  /// (매크로/섹터는 아침·일정 전용 — 장중엔 개별 종목 뉴스만 터진다.)
+  ActiveEvent? maybeIntraday({
+    required int day,
+    required List<Stock> tradableStocks,
+    double chance = kIntradayEventChance,
+  }) {
+    if (tradableStocks.isEmpty || _random.nextDouble() >= chance) return null;
+    final pool = [
+      for (final s in _specs)
+        if (s.scope == EventScope.stock && s.weight > 0) s
+    ];
+    if (pool.isEmpty) return null;
+    final total = pool.fold(0.0, (sum, s) => sum + s.weight);
+    var roll = _random.nextDouble() * total;
+    var spec = pool.last;
+    for (final s in pool) {
+      roll -= s.weight;
+      if (roll < 0) {
+        spec = s;
+        break;
+      }
+    }
+    final target = tradableStocks[_random.nextInt(tradableStocks.length)];
+    final event = ActiveEvent(spec: spec, startDay: day, stockCode: target.code);
+    active.add(event);
+    return event;
+  }
+
   /// 하루 종료 시 호출. 잔여 일수를 줄이고 만료 이벤트를 제거한다.
+  /// 만료된 루머는 다음 날 아침 후속으로 이어지도록 마킹한다.
   void endDay() {
     for (final e in active) {
       e.remainingDays -= 1;
+    }
+    for (final e in active) {
+      if (e.isExpired && kFollowUps.containsKey(e.spec.id)) {
+        pendingFollowUps.add((specId: e.spec.id, stockCode: e.stockCode));
+      }
     }
     active.removeWhere((e) => e.isExpired);
   }

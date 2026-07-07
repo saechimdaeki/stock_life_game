@@ -5,7 +5,7 @@ import 'package:stock_life_game/engine/engine.dart';
 
 void main() {
   group('EventEngine', () {
-    test('하루 이벤트 발생 빈도가 목표 밴드(0.5~1.5건)에 들어온다', () {
+    test('하루 이벤트 발생 빈도가 목표 밴드(0.9~1.8건)에 들어온다', () {
       final engine = EventEngine(random: Random(1));
       final stocks = createInitialStocks();
       const nDays = 20000;
@@ -16,9 +16,10 @@ void main() {
         engine.endDay();
       }
 
+      // 랜덤 기대 ~1.2 + 정기 매크로 2/30 + 루머 후속.
       final perDay = total / nDays;
-      expect(perDay, greaterThan(0.5));
-      expect(perDay, lessThan(1.5));
+      expect(perDay, greaterThan(0.9));
+      expect(perDay, lessThan(1.8));
     });
 
     test('가중치가 높은 이벤트가 더 자주 추첨된다', () {

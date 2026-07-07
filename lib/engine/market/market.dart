@@ -41,15 +41,17 @@ class Market {
   static const double _fxMin = 1250;
   static const double _fxMax = 1550;
 
-  /// 상장폐지 트리거: 종가가 하한의 2배 이하로 떨어지면 다음 날 폐지.
-  static const double delistMultiple = 2.0;
+  /// 상장폐지 트리거: 종가가 사실상 바닥(하한×1.1)에 붙으면 폐지.
+  /// 문턱을 높이면 회생 가능 종목까지 영구 동결돼 바이앤홀드가 과하게 깎인다.
+  static const double delistMultiple = 1.1;
 
   /// 어제 장마감에 상장폐지된 종목 이름들 (아침 공지용, openDay에서 초기화).
   final List<String> delistedYesterday = [];
 
-  /// 유효 드리프트 클램프 범위 (연환산).
+  /// 유효 드리프트 클램프 범위 (연환산). 이벤트가 여러 개 겹칠 수 있어
+  /// 비대칭이면 한쪽으로 수익률이 폭주한다 — 반드시 대칭 유지.
   static const double minMu = -1.0;
-  static const double maxMu = 1.5;
+  static const double maxMu = 1.0;
 
   /// 유효 변동성 클램프 범위 (연환산).
   static const double minSigma = 0.05;
@@ -61,8 +63,12 @@ class Market {
 
   final List<NewsItem> todaysNews = [];
 
+  /// 장중 돌발 이벤트 속보 대기열. 컨트롤러가 피드로 옮기며 비운다.
+  final List<NewsItem> intradayNewsBuffer = [];
+
   final Map<String, double> _dayMu = {};
   final Map<String, double> _daySigma = {};
+  int _currentDay = 1;
 
   List<Stock> get listedStocks => stocks.where((s) => s.isListed).toList();
 
@@ -114,7 +120,9 @@ class Market {
   /// 아침: 이벤트 추첨, 신규 이벤트 점프를 시가에 반영,
   /// 오늘 하루의 유효 mu/sigma를 계산한다.
   void openDay(int day) {
+    _currentDay = day;
     delistedYesterday.clear();
+    intradayNewsBuffer.clear();
     // 환율 랜덤워크 (하루 1회).
     usdKrw = (usdKrw * exp(_fxDailySigma * priceEngine.nextGaussian()))
         .clamp(_fxMin, _fxMax);
@@ -129,21 +137,36 @@ class Market {
       _applyJump(event);
     }
 
+    _recomputeDayParams(listed);
+    for (final stock in listed) {
+      stock.openDay();
+    }
+  }
+
+  /// 활성 이벤트를 반영해 오늘의 유효 mu/sigma를 다시 계산한다.
+  void _recomputeDayParams(List<Stock> listed) {
     for (final stock in listed) {
       final mu = stock.baseMu + eventEngine.muBonusFor(stock);
       final sigma = stock.baseSigma * eventEngine.sigmaMultFor(stock);
       _dayMu[stock.code] = mu.clamp(minMu, maxMu);
       _daySigma[stock.code] = sigma.clamp(minSigma, maxSigma);
-      stock.openDay();
     }
   }
 
   /// 장중 1틱: 현재 시각에 개장 중인 거래소의 종목만 가격을 갱신한다.
+  /// 낮은 확률로 돌발 이벤트가 터진다 (점프+드리프트 즉시 반영, 속보 대기열에 추가).
   void advanceTick(int minuteOfDay) {
     final open = stocks
         .where((s) => s.isListed && s.exchange.isOpenAt(minuteOfDay))
         .toList();
     if (open.isEmpty) return;
+    final breaking =
+        eventEngine.maybeIntraday(day: _currentDay, tradableStocks: open);
+    if (breaking != null) {
+      _applyJump(breaking);
+      _recomputeDayParams(listedStocks);
+      intradayNewsBuffer.add(_toNews(breaking));
+    }
     _moveStocks(open, recordTicks: true);
   }
 

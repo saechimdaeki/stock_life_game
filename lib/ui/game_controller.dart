@@ -152,10 +152,30 @@ class GameController extends ChangeNotifier {
       return;
     }
     _maybeAlertOnOpen(beforeMin, _session.clock.minuteOfDay);
+    _drainIntradayNews(withAlert: true);
     _maybePushNews();
     _maybeTriggerInteraction();
     _checkAchievements();
     notifyListeners();
+  }
+
+  /// 장중 돌발 이벤트 속보를 피드로 옮긴다. 실시간 틱이면 알림 팝업도 띄운다.
+  void _drainIntradayNews({bool withAlert = false}) {
+    final buffer = _session.market.intradayNewsBuffer;
+    if (buffer.isEmpty) return;
+    for (final item in buffer) {
+      _session.pushNews(FeedItem(
+        minute: _session.clock.minuteOfDay,
+        text: '🚨 ${item.headline}',
+        tone: item.event.spec.isGood ? 1 : -1,
+        channel: '돌발',
+      ));
+    }
+    if (withAlert) {
+      alert = '🚨 ${buffer.last.headline}';
+      alertSeq++;
+    }
+    buffer.clear();
   }
 
   /// 출근 후(아침 이후) 장중에 텔레그램 속보를 간간히 올린다.
@@ -242,6 +262,7 @@ class GameController extends ChangeNotifier {
         break;
       }
     }
+    _drainIntradayNews();
     notifyListeners();
   }
 
@@ -289,6 +310,7 @@ class GameController extends ChangeNotifier {
       _maybeAlertOnOpen(before, _session.clock.minuteOfDay);
       if (_session.anyExchangeOpen) break;
     }
+    _drainIntradayNews();
     _checkAchievements();
     play(); // 개장 도달 -> 정상 흐름 재개
   }
@@ -305,10 +327,12 @@ class GameController extends ChangeNotifier {
       }
       _maybeTriggerInteraction();
       if (pending != null) {
+        _drainIntradayNews();
         notifyListeners();
         return;
       }
     }
+    _drainIntradayNews();
     play();
   }
 
@@ -317,6 +341,7 @@ class GameController extends ChangeNotifier {
     if (_stage != DayStage.running) return;
     pause();
     while (_session.advanceTick()) {}
+    _drainIntradayNews();
     _checkAchievements();
     _stage = DayStage.dayOver;
     notifyListeners();
