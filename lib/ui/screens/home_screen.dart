@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/achievements.dart';
 import '../../data/game_session.dart';
 import '../../data/news_feed.dart';
 import '../../engine/engine.dart';
@@ -49,6 +50,13 @@ class HomeScreen extends ConsumerWidget {
                       Text('속보 피드',
                           style: Theme.of(context).textTheme.titleSmall),
                       const Spacer(),
+                      IconButton(
+                        onPressed: () => _showAchievements(context, session),
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.emoji_events_outlined,
+                            size: 18, color: Colors.amber),
+                        tooltip: '업적',
+                      ),
                       TextButton(
                         onPressed: () => _confirmNewGame(context, controller),
                         style: TextButton.styleFrom(
@@ -64,6 +72,54 @@ class HomeScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             _DayControls(controller: controller),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAchievements(BuildContext context, GameSession session) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          children: [
+            Text(
+                '🏆 업적  ${session.achievements.length}/${kAchievements.length}',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 10),
+            for (final a in kAchievements)
+              Builder(builder: (context) {
+                final done = session.achievements.contains(a.id);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Opacity(
+                    opacity: done ? 1 : 0.45,
+                    child: Row(
+                      children: [
+                        Text(a.emoji, style: const TextStyle(fontSize: 20)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(a.title,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600)),
+                              Text(a.desc,
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                        Text(done ? '✅' : '🔒',
+                            style: const TextStyle(fontSize: 16)),
+                      ],
+                    ),
+                  ),
+                );
+              }),
           ],
         ),
       ),
@@ -212,6 +268,9 @@ class _AssetCard extends StatelessWidget {
             Row(
               children: [
                 Text('현금 ${won(session.portfolio.cash)}',
+                    style: Theme.of(context).textTheme.bodySmall),
+                const Spacer(),
+                Text('💱 ${session.market.usdKrw.round()}원',
                     style: Theme.of(context).textTheme.bodySmall),
                 const Spacer(),
                 Text('오늘 ${signedWon(pnl)}',

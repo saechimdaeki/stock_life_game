@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../engine/engine.dart';
+import 'achievements.dart';
 import 'colleague.dart';
 import 'news_feed.dart';
 
@@ -97,6 +98,40 @@ class GameSession {
 
   /// 피곤해서 차트가 흐려 보이는 상태 (취함 효과 재사용).
   bool get tooTired => condition < 30;
+
+  /// 달성한 업적 id 집합. 저장됨.
+  final Set<String> achievements = {};
+
+  /// 엔딩(경제적 자유)을 이미 봤는지. 저장됨 — 재달성해도 다시 안 띄운다.
+  bool endingSeen = false;
+
+  /// 조건을 검사해 이번에 새로 달성한 업적들을 반환한다 (재달성 없음).
+  List<Achievement> checkAchievements() {
+    final newly = <Achievement>[];
+    for (final a in kAchievements) {
+      if (achievements.contains(a.id)) continue;
+      if (_achieved(a.id)) {
+        achievements.add(a.id);
+        newly.add(a);
+      }
+    }
+    return newly;
+  }
+
+  bool _achieved(String id) => switch (id) {
+        'first_trade' => portfolio.trades.isNotEmpty,
+        'profit_10m' => portfolio.realizedPnl >= 10000000,
+        'assets_20m' => totalAssets >= 20000000,
+        'assets_50m' => totalAssets >= 50000000,
+        'assets_100m' => totalAssets >= 100000000,
+        'assets_1b' => totalAssets >= 1000000000,
+        'bestie' => rapport.values.any((v) => v >= 100),
+        'manager' => rank >= 3,
+        'executive' => rank >= 6,
+        'day_30' => clock.day >= 30,
+        'day_100' => clock.day >= 100,
+        _ => false,
+      };
 
   /// 텔레그램형 속보 피드(오늘). 아침 뉴스 + 장중 실시간 속보. 저장 안 함.
   final List<FeedItem> feed = [];
@@ -195,7 +230,29 @@ class GameSession {
       morningNotices.add(
           '월급날입니다! $rankTitle +${(currentSalary / 10000).round()}만원');
     }
+    // 어제 장마감에 상장폐지된 종목 공지 (openDay가 목록을 비우기 전에 읽는다).
+    for (final name in market.delistedYesterday) {
+      morningNotices.add('💀 $name 상장폐지 — 보유분은 휴지조각이 됐다');
+    }
+    // IPO: 5일차부터 낮은 확률로 신규 상장 (openDay 전에 상장해야 오늘부터 움직인다).
+    if (clock.day >= 5) {
+      final ipoRng = Random(seed ^ (clock.day * 0x1F123BB5));
+      if (ipoRng.nextDouble() < 0.05) {
+        final ipo = market.debutIpo(ipoRng);
+        if (ipo != null) {
+          morningNotices.add('🔔 신규상장! ${ipo.name} 오늘 데뷔 — 따상 갈까?');
+        }
+      }
+    }
+    final fxBefore = market.usdKrw;
     market.openDay(clock.day);
+    // 환율이 크게 움직였으면 공지.
+    final fxMove = (market.usdKrw - fxBefore) / fxBefore;
+    if (fxMove.abs() >= 0.01) {
+      morningNotices.add('💱 환율 ${fxMove > 0 ? '급등' : '급락'}: '
+          '${market.usdKrw.round()}원 (${fxMove > 0 ? '+' : ''}'
+          '${(fxMove * 100).toStringAsFixed(1)}%)');
+    }
     // 친밀도 만렙(100) 동료는 아침마다 정보를 하나 흘려주고, 성향별 보너스도 준다.
     for (final c in kColleagues) {
       if (rapportOf(c.id) < 100) continue;
@@ -270,7 +327,7 @@ class GameSession {
   TradeResult buy(Stock stock, int quantity) {
     final blocked = _tradeBlockReason(stock);
     if (blocked != null) return TradeResult.failure(blocked);
-    final r = portfolio.buy(stock.code, stock.priceKrw, quantity,
+    final r = portfolio.buy(stock.code, market.priceKrwOf(stock), quantity,
         day: clock.day, tick: clock.minuteOfDay);
     if (r.isSuccess) _maybeNightTradeFatigue();
     return r;
@@ -279,7 +336,7 @@ class GameSession {
   TradeResult sell(Stock stock, int quantity) {
     final blocked = _tradeBlockReason(stock);
     if (blocked != null) return TradeResult.failure(blocked);
-    final r = portfolio.sell(stock.code, stock.priceKrw, quantity,
+    final r = portfolio.sell(stock.code, market.priceKrwOf(stock), quantity,
         day: clock.day, tick: clock.minuteOfDay);
     if (r.isSuccess) _maybeNightTradeFatigue();
     return r;
@@ -309,6 +366,9 @@ class GameSession {
         'day': clock.day,
         'rank': rank,
         'condition': condition,
+        'usdKrw': market.usdKrw,
+        'achievements': achievements.toList(),
+        'endingSeen': endingSeen,
         'playerName': playerName,
         'avatarId': avatarId,
         'rapport': rapport,
@@ -323,7 +383,7 @@ class GameSession {
             {
               'code': s.code,
               'price': s.price,
-              'delisted': !s.isListed,
+              'status': s.status.name,
               'closeHistory': s.closeHistory,
               'candles': [for (final c in s.candleHistory) c.toJson()],
             },
@@ -353,7 +413,13 @@ class GameSession {
       final stock = stockByCode[map['code']];
       if (stock == null) continue;
       stock.price = (map['price'] as num).toDouble();
-      if (map['delisted'] == true) stock.status = ListingStatus.delisted;
+      final statusName = map['status'] as String?;
+      if (statusName != null) {
+        stock.status = ListingStatus.values.byName(statusName);
+      } else if (map['delisted'] == true) {
+        // 구버전 세이브 하위호환 (bool 필드).
+        stock.status = ListingStatus.delisted;
+      }
       stock.closeHistory
         ..clear()
         ..addAll((map['closeHistory'] as List)
@@ -412,7 +478,12 @@ class GameSession {
       ..playerName = (json['playerName'] as String?) ?? ''
       ..avatarId = (json['avatarId'] as int?) ?? 0
       // 저장은 취침 직후(회복 전) 값 — 아래 startDay()가 회복을 적용한다.
-      ..condition = (json['condition'] as int?) ?? 100;
+      ..condition = (json['condition'] as int?) ?? 100
+      ..endingSeen = (json['endingSeen'] as bool?) ?? false;
+    session.market.usdKrw =
+        (json['usdKrw'] as num?)?.toDouble() ?? kUsdKrw;
+    session.achievements
+        .addAll(((json['achievements'] as List?) ?? const []).cast<String>());
     // 친밀도 복원 (구버전 세이브엔 없음).
     final rapportJson = json['rapport'] as Map<String, dynamic>?;
     if (rapportJson != null) {

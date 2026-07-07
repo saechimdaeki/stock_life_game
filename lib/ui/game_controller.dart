@@ -78,6 +78,36 @@ class GameController extends ChangeNotifier {
   int peekSecondsLeft = 0;
   Timer? _peekTimer;
 
+  /// 경제적 자유(총자산 10억) 달성 — UI가 엔딩 다이얼로그를 띄운다.
+  bool pendingEnding = false;
+
+  /// 새로 달성한 업적을 알림·피드로 띄우고, 10억 달성이면 엔딩을 건다.
+  void _checkAchievements() {
+    final newly = _session.checkAchievements();
+    for (final a in newly) {
+      alert = '🏆 업적 달성: ${a.emoji} ${a.title}';
+      alertSeq++;
+      _session.pushNews(FeedItem(
+        minute: _session.clock.minuteOfDay,
+        text: '🏆 업적 달성 — ${a.emoji} ${a.title}',
+        tone: 1,
+        channel: '업적',
+      ));
+    }
+    if (!_session.endingSeen && _session.achievements.contains('assets_1b')) {
+      _session.endingSeen = true;
+      pendingEnding = true;
+      pause();
+    }
+  }
+
+  /// 엔딩 다이얼로그 닫음 — 계속 플레이.
+  void resolveEnding() {
+    pendingEnding = false;
+    if (_stage == DayStage.running) play();
+    notifyListeners();
+  }
+
   /// 아침 브리핑 종료, 하루 진행 자동 시작(계속 흐름).
   void startDay() {
     if (_stage != DayStage.morning) return;
@@ -124,6 +154,7 @@ class GameController extends ChangeNotifier {
     _maybeAlertOnOpen(beforeMin, _session.clock.minuteOfDay);
     _maybePushNews();
     _maybeTriggerInteraction();
+    _checkAchievements();
     notifyListeners();
   }
 
@@ -258,6 +289,7 @@ class GameController extends ChangeNotifier {
       _maybeAlertOnOpen(before, _session.clock.minuteOfDay);
       if (_session.anyExchangeOpen) break;
     }
+    _checkAchievements();
     play(); // 개장 도달 -> 정상 흐름 재개
   }
 
@@ -285,6 +317,7 @@ class GameController extends ChangeNotifier {
     if (_stage != DayStage.running) return;
     pause();
     while (_session.advanceTick()) {}
+    _checkAchievements();
     _stage = DayStage.dayOver;
     notifyListeners();
   }
@@ -295,6 +328,7 @@ class GameController extends ChangeNotifier {
     _session.endDay();
     await _persist();
     _session.startDay();
+    _checkAchievements(); // Day 30 도달 등 아침 시점 업적
     _stage = DayStage.morning;
     notifyListeners();
   }
@@ -319,8 +353,11 @@ class GameController extends ChangeNotifier {
 
   Future<void> _persist() => _saves.save(_session.toJson());
 
-  /// 매매 후 UI 갱신용.
-  void refresh() => notifyListeners();
+  /// 매매 후 UI 갱신용. 매매 직후 업적(첫 매매·자산 등)도 바로 반영한다.
+  void refresh() {
+    _checkAchievements();
+    notifyListeners();
+  }
 
   @override
   void dispose() {

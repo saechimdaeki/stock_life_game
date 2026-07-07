@@ -40,7 +40,12 @@ void main() {
           eventEngine: EventEngine(random: random),
         );
 
-        final initialKrw = {for (final s in stocks) s.code: s.priceKrw};
+        // IPO 대기 풀은 시뮬 내내 비상장(가격 불변)이므로 지표에서 제외.
+        final universe =
+            stocks.where((s) => s.status != ListingStatus.unlisted).toList();
+        final initialKrw = {
+          for (final s in universe) s.code: market.priceKrwOf(s)
+        };
         var eventCount = 0;
 
         for (var day = 1; day <= nDays; day++) {
@@ -49,24 +54,25 @@ void main() {
           eventCount += market.todaysNews.length;
         }
 
-        // --- 무결성 검증 ---
-        for (final stock in stocks) {
+        // --- 무결성 검증 (상장폐지된 종목은 히스토리가 짧을 수 있다) ---
+        for (final stock in universe) {
           expect(stock.price.isFinite, isTrue,
               reason: '${stock.name} 가격 발산');
           expect(stock.price, greaterThan(0));
-          expect(stock.closeHistory.length, nDays);
+          expect(stock.closeHistory.length,
+              stock.isListed ? nDays : lessThanOrEqualTo(nDays));
         }
 
         // --- 밸런스 지표 수집 (원화 환산 균등 바이앤홀드) ---
         var ratioSum = 0.0;
         var collapsed = 0;
-        for (final stock in stocks) {
-          final ratio = stock.priceKrw / initialKrw[stock.code]!;
+        for (final stock in universe) {
+          final ratio = market.priceKrwOf(stock) / initialKrw[stock.code]!;
           ratioSum += ratio;
           if (ratio < 0.1) collapsed++;
         }
-        buyHoldReturns.add(ratioSum / stocks.length - 1.0);
-        collapseRates.add(collapsed / stocks.length);
+        buyHoldReturns.add(ratioSum / universe.length - 1.0);
+        collapseRates.add(collapsed / universe.length);
         eventRates.add(eventCount / nDays);
       }
 
@@ -185,16 +191,17 @@ void main() {
             if (!market.isTradableAt(stock, clock.minuteOfDay)) continue;
             if (trader.nextBool()) {
               final budget = portfolio.cash * 0.2;
-              final qty = budget ~/ stock.priceKrw;
+              final priceKrw = market.priceKrwOf(stock);
+              final qty = budget ~/ priceKrw;
               if (qty > 0) {
-                portfolio.buy(stock.code, stock.priceKrw, qty,
+                portfolio.buy(stock.code, priceKrw, qty,
                     day: day, tick: clock.minuteOfDay);
               }
             } else {
               final position = portfolio.positionOf(stock.code);
               if (position != null) {
                 portfolio.sell(
-                    stock.code, stock.priceKrw, position.quantity,
+                    stock.code, market.priceKrwOf(stock), position.quantity,
                     day: day, tick: clock.minuteOfDay);
               }
             }

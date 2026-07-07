@@ -448,8 +448,8 @@ class _TradeSheetState extends State<_TradeSheet> {
     final session = widget.controller.session;
     if (widget.isBuy) {
       final budget = session.portfolio.cash;
-      final unitCost =
-          widget.stock.priceKrw * (1 + session.portfolio.feeRate);
+      final unitCost = session.market.priceKrwOf(widget.stock) *
+          (1 + session.portfolio.feeRate);
       return unitCost <= 0 ? 0 : budget ~/ unitCost;
     }
     return session.portfolio.positionOf(widget.stock.code)?.quantity ?? 0;
@@ -457,7 +457,8 @@ class _TradeSheetState extends State<_TradeSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.stock.priceKrw * quantity;
+    final market = widget.controller.session.market;
+    final total = market.priceKrwOf(widget.stock) * quantity;
     final label = widget.isBuy ? '매수' : '매도';
 
     return Padding(
@@ -470,7 +471,7 @@ class _TradeSheetState extends State<_TradeSheet> {
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
           Text('현재가 ${stockPrice(widget.stock)}'
-              '${widget.stock.exchangeId == ExchangeId.us ? ' (환율 ${kUsdKrw.round()}원)' : ''}'),
+              '${widget.stock.exchangeId == ExchangeId.us ? ' (환율 ${market.usdKrw.round()}원)' : ''}'),
           const SizedBox(height: 16),
           Row(
             children: [

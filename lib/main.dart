@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'data/save_repository.dart';
+import 'ui/format.dart';
 import 'ui/game_controller.dart';
 import 'ui/screens/character_creation_screen.dart';
 import 'ui/screens/colleague_chat_sheet.dart';
@@ -92,6 +93,7 @@ class _MainShellState extends State<MainShell> {
           IndexedStack(index: _index, children: _screens),
           const Positioned(top: 8, left: 8, right: 8, child: _GameAlertBanner()),
           const _InteractionHost(),
+          const _EndingHost(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -158,6 +160,60 @@ class _InteractionHostState extends ConsumerState<_InteractionHost> {
         ));
     }
     controller.resolveInteraction();
+    if (mounted) setState(() => _showing = false);
+  }
+}
+
+/// 경제적 자유(총자산 10억) 달성 시 엔딩 다이얼로그를 띄운다. 이후 계속 플레이 가능.
+class _EndingHost extends ConsumerStatefulWidget {
+  const _EndingHost();
+
+  @override
+  ConsumerState<_EndingHost> createState() => _EndingHostState();
+}
+
+class _EndingHostState extends ConsumerState<_EndingHost> {
+  bool _showing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = ref.watch(gameControllerProvider);
+    if (controller.pendingEnding && !_showing) {
+      _showing = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _show(controller));
+    }
+    return const SizedBox.shrink();
+  }
+
+  Future<void> _show(GameController controller) async {
+    final session = controller.session;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('👑 경제적 자유!'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Day ${session.clock.day}, 총자산 ${won(session.totalAssets)}.'),
+            const SizedBox(height: 8),
+            const Text('월급쟁이 개미에서 시작해 마침내 10억을 만들었다.\n'
+                '이제 상사 눈치도, 몰래보기 30초도 필요 없다.'),
+            const SizedBox(height: 8),
+            const Text('…물론 내일도 출근은 해야 한다. 계속 달릴까?',
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('계속 달린다 🏃'),
+          ),
+        ],
+      ),
+    );
+    controller.resolveEnding();
     if (mounted) setState(() => _showing = false);
   }
 }

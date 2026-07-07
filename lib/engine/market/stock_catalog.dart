@@ -37,4 +37,10 @@ List<Stock> createInitialStocks() => [
       Stock(code: 'JPBK', name: '제이피뱅크', sectorId: SectorId.finance, baseMu: 0.06, baseSigma: 0.25, initialPrice: 200, exchangeId: ExchangeId.us),
       Stock(code: 'PFZN', name: '화이젠', sectorId: SectorId.bio, baseMu: 0.03, baseSigma: 0.40, initialPrice: 30, exchangeId: ExchangeId.us),
       Stock(code: 'XNOL', name: '엑슨오일', sectorId: SectorId.energy, baseMu: 0.05, baseSigma: 0.30, initialPrice: 110, exchangeId: ExchangeId.us),
+
+      // ---- IPO 대기 풀 (게임 중 확률적으로 신규 상장, 그 전엔 안 보임) ----
+      Stock(code: '110004', name: '퀀텀칩스', sectorId: SectorId.tech, baseMu: 0.14, baseSigma: 0.80, initialPrice: 24000, status: ListingStatus.unlisted),
+      Stock(code: '220004', name: '지노믹스랩', sectorId: SectorId.bio, baseMu: 0.08, baseSigma: 0.70, initialPrice: 19500, status: ListingStatus.unlisted),
+      Stock(code: '550004', name: '스타배터리', sectorId: SectorId.energy, baseMu: 0.11, baseSigma: 0.65, initialPrice: 36000, status: ListingStatus.unlisted),
+      Stock(code: 'RBTX', name: '로보틱스엑스', sectorId: SectorId.manufacturing, baseMu: 0.12, baseSigma: 0.70, initialPrice: 45, exchangeId: ExchangeId.us, status: ListingStatus.unlisted),
     ];

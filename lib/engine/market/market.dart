@@ -34,6 +34,19 @@ class Market {
   final PriceEngine priceEngine;
   final EventEngine eventEngine;
 
+  /// 원/달러 환율. 매일 아침 랜덤워크(일 변동성 ~0.6%, 1250~1550 밴드).
+  double usdKrw = kUsdKrw;
+
+  static const double _fxDailySigma = 0.006;
+  static const double _fxMin = 1250;
+  static const double _fxMax = 1550;
+
+  /// 상장폐지 트리거: 종가가 하한의 2배 이하로 떨어지면 다음 날 폐지.
+  static const double delistMultiple = 2.0;
+
+  /// 어제 장마감에 상장폐지된 종목 이름들 (아침 공지용, openDay에서 초기화).
+  final List<String> delistedYesterday = [];
+
   /// 유효 드리프트 클램프 범위 (연환산).
   static const double minMu = -1.0;
   static const double maxMu = 1.5;
@@ -56,11 +69,26 @@ class Market {
   List<Stock> listedOn(ExchangeId exchangeId) =>
       stocks.where((s) => s.isListed && s.exchangeId == exchangeId).toList();
 
+  /// 원화 환산 가격 (포트폴리오 평가·매매 통화 통일용).
+  double priceKrwOf(Stock s) =>
+      s.exchangeId == ExchangeId.us ? s.price * usdKrw : s.price;
+
   /// 원화 환산 현재가 스냅샷 (포트폴리오 평가용).
   Map<String, double> get prices => {
         for (final s in stocks)
-          if (s.isListed) s.code: s.priceKrw,
+          if (s.isListed) s.code: priceKrwOf(s),
       };
+
+  /// IPO 대기 풀에서 하나를 상장시킨다. 풀이 비었으면 null.
+  Stock? debutIpo(Random random) {
+    final pool = stocks.where((s) => s.status == ListingStatus.unlisted).toList();
+    if (pool.isEmpty) return null;
+    final stock = pool[random.nextInt(pool.length)];
+    stock.status = ListingStatus.listed;
+    // 상장 직후 차트가 텅 비지 않게 짧은 더미 히스토리만 깐다.
+    stock.seedHistory(random, days: 5);
+    return stock;
+  }
 
   Stock? stockByCode(String code) {
     for (final s in stocks) {
@@ -86,6 +114,10 @@ class Market {
   /// 아침: 이벤트 추첨, 신규 이벤트 점프를 시가에 반영,
   /// 오늘 하루의 유효 mu/sigma를 계산한다.
   void openDay(int day) {
+    delistedYesterday.clear();
+    // 환율 랜덤워크 (하루 1회).
+    usdKrw = (usdKrw * exp(_fxDailySigma * priceEngine.nextGaussian()))
+        .clamp(_fxMin, _fxMax);
     final listed = listedStocks;
     final rolled = eventEngine.rollMorning(day: day, listedStocks: listed);
 
@@ -115,10 +147,15 @@ class Market {
     _moveStocks(open, recordTicks: true);
   }
 
-  /// 장마감: 종가 기록, 이벤트 잔여 일수 차감·만료.
+  /// 장마감: 종가 기록, 붕괴 종목 상장폐지, 이벤트 잔여 일수 차감·만료.
   void closeDay() {
     for (final stock in stocks) {
-      if (stock.isListed) stock.closeDay();
+      if (!stock.isListed) continue;
+      stock.closeDay();
+      if (stock.price <= _minPriceOf(stock) * delistMultiple) {
+        stock.status = ListingStatus.delisted;
+        delistedYesterday.add(stock.name);
+      }
     }
     eventEngine.endDay();
   }

@@ -28,8 +28,8 @@ class Candle {
       );
 }
 
-/// 상장 상태. 상장폐지 트리거는 Phase 3에서 구현하며 필드만 미리 둔다.
-enum ListingStatus { listed, delisted }
+/// 상장 상태. unlisted는 IPO 대기 풀(시장에 안 보임).
+enum ListingStatus { unlisted, listed, delisted }
 
 class Stock {
   Stock({
@@ -40,6 +40,7 @@ class Stock {
     required this.baseSigma,
     required double initialPrice,
     this.exchangeId = ExchangeId.krx,
+    this.status = ListingStatus.listed,
   })  : price = initialPrice,
         assert(initialPrice > 0),
         assert(baseSigma > 0);
@@ -57,15 +58,11 @@ class Stock {
 
   /// 거래소 통화 기준 가격 (국장: 원, 미장: 달러).
   double price;
-  ListingStatus status = ListingStatus.listed;
+  ListingStatus status;
 
   bool get isListed => status == ListingStatus.listed;
 
   Exchange get exchange => exchangeOf(exchangeId);
-
-  /// 원화 환산 가격 (포트폴리오 평가·매매 통화 통일용).
-  double get priceKrw =>
-      exchangeId == ExchangeId.us ? price * kUsdKrw : price;
 
   /// 일봉 종가 히스토리 (통계용).
   final List<double> closeHistory = [];
