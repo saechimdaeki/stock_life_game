@@ -24,43 +24,46 @@ class HomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SceneView(controller: controller),
-            const SizedBox(height: 12),
-            _ClockCard(controller: controller),
-            const SizedBox(height: 12),
-            _AssetCard(session: session),
-            const SizedBox(height: 12),
+            // 컨트롤만 하단 고정, 나머지는 함께 스크롤(작은 화면 오버플로 방지).
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  _ScheduleCard(
+                  SceneView(controller: controller),
+                  const SizedBox(height: 12),
+                  _ClockCard(controller: controller),
+                  const SizedBox(height: 8),
+                  _AssetCard(session: session),
+                  const SizedBox(height: 8),
+                  _ScheduleTimeline(
                     session: session,
                     currentMinute: session.clock.phase == DayPhase.work
                         ? session.clock.minuteOfDay
                         : null,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Text('📢', style: TextStyle(fontSize: 16)),
+                      const Text('📢', style: TextStyle(fontSize: 15)),
                       const SizedBox(width: 6),
                       Text('속보 피드',
-                          style: Theme.of(context).textTheme.titleMedium),
+                          style: Theme.of(context).textTheme.titleSmall),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => _confirmNewGame(context, controller),
+                        style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact),
+                        child: const Text('새 게임',
+                            style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
                   _NewsFeed(session: session),
                 ],
               ),
             ),
             const SizedBox(height: 8),
             _DayControls(controller: controller),
-            TextButton(
-              onPressed: () => _confirmNewGame(context, controller),
-              child: const Text('새 게임 시작',
-                  style: TextStyle(color: Colors.grey)),
-            ),
           ],
         ),
       ),
@@ -104,9 +107,6 @@ class _ClockCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = controller.session;
     final clock = session.clock;
-    final block = clock.phase == DayPhase.work
-        ? session.todaySchedule.blockAt(clock.minuteOfDay)
-        : null;
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -129,10 +129,6 @@ class _ClockCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.headlineMedium),
               ],
             ),
-            if (block != null) ...[
-              const SizedBox(height: 8),
-              _BlockChip(block: block),
-            ],
             const SizedBox(height: 6),
             _ConditionBar(condition: session.condition),
           ],
@@ -173,33 +169,6 @@ class _ConditionBar extends StatelessWidget {
             style: TextStyle(
                 fontSize: 12, color: color, fontWeight: FontWeight.w700)),
       ],
-    );
-  }
-}
-
-/// 현재 근무 상황 표시(분위기용). 매매는 언제든 가능.
-class _BlockChip extends StatelessWidget {
-  const _BlockChip({required this.block});
-
-  final WorkBlock block;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.work_outline, size: 16, color: Colors.grey),
-          const SizedBox(width: 6),
-          Text(block.label,
-              style: const TextStyle(color: Colors.grey, fontSize: 13)),
-        ],
-      ),
     );
   }
 }
@@ -256,84 +225,117 @@ class _AssetCard extends StatelessWidget {
   }
 }
 
-/// 오늘의 근무 일정표. 하루 종일 표시하며, 근무 중이면 현재 블록을 강조한다.
-class _ScheduleCard extends StatelessWidget {
-  const _ScheduleCard({required this.session, this.currentMinute});
+/// 오늘의 근무 일정을 가로 타임라인 바(09~18시, 길이 비례)로 그린다.
+/// 근무 중이면 현재 블록을 밝게 강조하고 상단에 "지금" 라벨을 띄운다.
+class _ScheduleTimeline extends StatelessWidget {
+  const _ScheduleTimeline({required this.session, this.currentMinute});
 
   final GameSession session;
 
   /// 근무 시간이면 현재 시각(분), 아니면 null.
   final int? currentMinute;
 
-  String _hhmm(int minute) {
-    final h = (minute ~/ 60) % 24;
-    final m = minute % 60;
-    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
-  }
+  static String _emoji(WorkBlockKind kind) => switch (kind) {
+        WorkBlockKind.meeting => '🗣',
+        WorkBlockKind.focus => '💻',
+        WorkBlockKind.report => '📝',
+        WorkBlockKind.bossAway => '👀',
+        WorkBlockKind.lunch => '🍚',
+      };
+
+  static Color _color(WorkBlockKind kind) => switch (kind) {
+        WorkBlockKind.meeting => Colors.deepOrangeAccent,
+        WorkBlockKind.focus => Colors.blueGrey,
+        WorkBlockKind.report => Colors.indigoAccent,
+        WorkBlockKind.bossAway => Colors.teal,
+        WorkBlockKind.lunch => Colors.amber,
+      };
 
   @override
   Widget build(BuildContext context) {
     final blocks = session.todaySchedule.blocks;
+    final current = currentMinute == null
+        ? null
+        : session.todaySchedule.blockAt(currentMinute!);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.event_note, size: 18),
+                const Icon(Icons.event_note, size: 15),
                 const SizedBox(width: 6),
-                Text('오늘의 근무 일정',
-                    style: Theme.of(context).textTheme.titleSmall),
+                Text('오늘 근무', style: Theme.of(context).textTheme.titleSmall),
+                const Spacer(),
+                Text(
+                  current != null ? '지금: ${current.label}' : '09:00 ~ 18:00',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: current != null ? Colors.teal : Colors.grey,
+                      fontWeight:
+                          current != null ? FontWeight.w700 : FontWeight.normal),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            for (final b in blocks)
-              Builder(builder: (context) {
-                final active =
-                    currentMinute != null && b.contains(currentMinute!);
-                return Container(
-                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
-                  decoration: active
-                      ? BoxDecoration(
-                          color: Colors.teal.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(6),
-                        )
-                      : null,
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 92,
-                        child: Text('${_hhmm(b.startMin)}~${_hhmm(b.endMin)}',
-                            style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 30,
+              child: Row(
+                children: [
+                  for (final b in blocks)
+                    Expanded(
+                      flex: b.endMin - b.startMin,
+                      child: Tooltip(
+                        message:
+                            '${_hhmm(b.startMin)}~${_hhmm(b.endMin)} ${b.label}',
+                        child: Builder(builder: (context) {
+                          final active = currentMinute != null &&
+                              b.contains(currentMinute!);
+                          return Container(
+                            margin: const EdgeInsets.only(right: 2),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: _color(b.kind)
+                                  .withValues(alpha: active ? 0.85 : 0.28),
+                              borderRadius: BorderRadius.circular(6),
+                              border: active
+                                  ? Border.all(color: Colors.white70)
+                                  : null,
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(_emoji(b.kind),
+                                  style: const TextStyle(fontSize: 14)),
+                            ),
+                          );
+                        }),
                       ),
-                      Icon(Icons.circle,
-                          size: 6,
-                          color: active ? Colors.teal : Colors.grey),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(b.label,
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: active ? Colors.teal : null,
-                                fontWeight:
-                                    active ? FontWeight.w700 : FontWeight.normal)),
-                      ),
-                      if (active)
-                        const Text('지금',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.teal,
-                                fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                );
-              }),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 3),
+            const Row(
+              children: [
+                Text('09:00', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                Spacer(),
+                Text('12:00', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                Spacer(),
+                Text('18:00', style: TextStyle(fontSize: 9, color: Colors.grey)),
+              ],
+            ),
           ],
         ),
       ),
     );
+  }
+
+  static String _hhmm(int minute) {
+    final h = (minute ~/ 60) % 24;
+    final m = minute % 60;
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
   }
 }
 

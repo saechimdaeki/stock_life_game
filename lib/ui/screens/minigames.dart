@@ -480,28 +480,48 @@ class _SequenceGameState extends State<SequenceGame> {
   int _inputIdx = 0;
   bool _done = false;
 
+  // 시연은 취소 가능한 단발 타이머 체인으로 돌린다 (언마운트 시 잔여 타이머 없음).
+  Timer? _timer;
+  int _playIdx = 0;
+  bool _lit = false;
+
   @override
   void initState() {
     super.initState();
     final rng = Random();
     _seq = List.generate(4, (_) => rng.nextInt(4));
-    _playback();
+    _timer = Timer(const Duration(milliseconds: 500), _stepPlayback);
   }
 
-  Future<void> _playback() async {
-    // 컨디션이 나쁘면 깜빡임이 짧아져 외우기 어렵다 (450ms → 270ms).
-    final on = Duration(
-        milliseconds: (450 * (1 - widget.handicap * 0.4)).round());
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    for (final i in _seq) {
-      if (!mounted) return;
-      setState(() => _flashing = i);
-      await Future<void>.delayed(on);
-      if (!mounted) return;
-      setState(() => _flashing = -1);
-      await Future<void>.delayed(const Duration(milliseconds: 160));
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _stepPlayback() {
+    if (!mounted) return;
+    if (_lit) {
+      setState(() {
+        _flashing = -1;
+        _lit = false;
+        _playIdx++;
+      });
+      if (_playIdx >= _seq.length) {
+        setState(() => _showing = false);
+        return;
+      }
+      _timer = Timer(const Duration(milliseconds: 160), _stepPlayback);
+    } else {
+      setState(() {
+        _flashing = _seq[_playIdx];
+        _lit = true;
+      });
+      // 컨디션이 나쁘면 깜빡임이 짧아져 외우기 어렵다 (450ms → 270ms).
+      final on = Duration(
+          milliseconds: (450 * (1 - widget.handicap * 0.4)).round());
+      _timer = Timer(on, _stepPlayback);
     }
-    if (mounted) setState(() => _showing = false);
   }
 
   void _tap(int i) {
