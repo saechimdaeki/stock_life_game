@@ -13,7 +13,7 @@
 ![platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-lightgrey)
 ![state](https://img.shields.io/badge/state-Riverpod-4B32C3)
 
-<img src="docs/screenshots/home.png" alt="주식 인생 홈 화면" width="320">
+<img src="docs/screenshots/home.png" alt="주식 인생 홈 화면" width="840">
 
 </div>
 
@@ -38,13 +38,24 @@
 
 ## 📸 스크린샷
 
-> 이미지는 [`docs/screenshots/`](docs/screenshots/)에 캡처를 넣으면 표시됩니다.
-
-| 홈 | 시장 | 종목 차트 |
-|:---:|:---:|:---:|
-| ![홈](docs/screenshots/home.png) | ![시장](docs/screenshots/market.png) | ![차트](docs/screenshots/chart.png) |
-| **회의 미니게임** | **동료 대화** | **업적** |
-| ![회의](docs/screenshots/meeting.png) | ![대화](docs/screenshots/chat.png) | ![업적](docs/screenshots/achievements.png) |
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/character.png" alt="캐릭터 생성" width="100%"><br><b>🎭 캐릭터 생성</b><br>아바타 8종 중 내 분신을 고른다</td>
+    <td width="50%"><img src="docs/screenshots/market.png" alt="시장" width="100%"><br><b>📊 시장</b><br>국장·미장 종목과 실시간 등락, 💡팁 배지</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/chart.png" alt="종목 차트" width="100%"><br><b>📈 종목 차트</b><br>캔들 차트 + 매수/매도</td>
+    <td width="50%"><img src="docs/screenshots/meeting.png" alt="회의 미니게임" width="100%"><br><b>🗣 회의 미니게임</b><br>성공하면 30초 시간정지 몰래 매매</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/chat.png" alt="점심 제안" width="100%"><br><b>🍚 점심 제안</b><br>동료와 같이 갈까?</td>
+    <td width="50%"><img src="docs/screenshots/chat2.png" alt="정보 획득" width="100%"><br><b>💡 정보 획득</b><br>친밀도 +3, "국민홀딩스 오를 것 같다"</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/achievements.png" alt="업적" width="100%"><br><b>🏆 업적</b><br>첫 매매부터 10억까지 11종</td>
+    <td width="50%" align="center"><br><br><br><b>🎬 그리고…</b><br><br>총자산 <b>10억</b> 달성 →<br>경제적 자유 엔딩<br><br>…물론 내일도 출근은 해야 한다.</td>
+  </tr>
+</table>
 
 ## 🎮 게임플레이
 
