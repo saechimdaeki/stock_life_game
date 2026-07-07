@@ -59,10 +59,10 @@ class GameController extends ChangeNotifier {
   Timer? _ticker;
   bool get isPlaying => _ticker != null;
 
-  /// 하루가 처음부터 끝까지 끊김 없이 흐른다(1x=1500ms/틱). 빨리감기·스킵 없음.
-  /// 급하면 일시정지, 배속은 유저가 직접 고른다.
+  /// 하루가 처음부터 끝까지 끊김 없이 흐른다. 급하면 일시정지·배속·스킵.
+  /// 1x = 5000ms/틱(게임 15분) — 국장 하루(09:00~15:30)가 현실 ~2분 10초.
   int speed = 1;
-  static const _tickMs = 2500;
+  static const _tickMs = 5000;
 
   /// 좌상단 팝업 알림(장 개장 등). [alertSeq]가 바뀌면 새 알림.
   String? alert;
