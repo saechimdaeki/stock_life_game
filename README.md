@@ -40,22 +40,44 @@
 
 ## 📸 스크린샷
 
+### 게임 화면
+
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/character.png" alt="캐릭터 생성" width="100%"><br><b>🎭 캐릭터 생성</b><br>아바타 8종 중 내 분신을 고른다</td>
+    <td width="50%"><img src="docs/screenshots/character.png" alt="캐릭터 생성" width="100%"><br><b>🎭 캐릭터 생성</b><br>아바타 8종 — 시작 특성이 제각각인 로그라이크 감성</td>
     <td width="50%"><img src="docs/screenshots/market.png" alt="시장" width="100%"><br><b>📊 시장</b><br>국장·미장 종목과 실시간 등락, 💡팁 배지</td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/chart.png" alt="종목 차트" width="100%"><br><b>📈 종목 차트</b><br>캔들 차트 + 매수/매도</td>
-    <td width="50%"><img src="docs/screenshots/meeting.png" alt="회의 미니게임" width="100%"><br><b>🗣 회의 미니게임</b><br>성공하면 30초 시간정지 몰래 매매</td>
+    <td width="50%"><img src="docs/screenshots/colleagues.png" alt="동료" width="100%"><br><b>👥 동료 8명</b><br>성향·신뢰도가 다 다르다. 친해질수록 정보가 정확해진다</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/chat.png" alt="점심 제안" width="100%"><br><b>🍚 점심 제안</b><br>동료와 같이 갈까?</td>
-    <td width="50%"><img src="docs/screenshots/chat2.png" alt="정보 획득" width="100%"><br><b>💡 정보 획득</b><br>친밀도 +3, "국민홀딩스 오를 것 같다"</td>
-  </tr>
-  <tr>
+    <td width="50%"><img src="docs/screenshots/feed.png" alt="속보 피드" width="100%"><br><b>📢 속보 피드</b><br>뉴스·단독·지라시 — '단독'은 진짜 방향을 흘린다. 누굴 믿을까?</td>
     <td width="50%"><img src="docs/screenshots/achievements.png" alt="업적" width="100%"><br><b>🏆 업적</b><br>첫 매매부터 10억까지 11종</td>
-    <td width="50%" align="center"><br><br><br><b>🎬 그리고…</b><br><br>총자산 <b>10억</b> 달성 →<br>경제적 자유 엔딩<br><br>…물론 내일도 출근은 해야 한다.</td>
+  </tr>
+</table>
+
+### 직장인의 하루 — 스토리 & 컷씬
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/meeting.png" alt="회의 미니게임" width="100%"><br><b>🗣 회의 미니게임</b><br>성공하면 30초 시간정지 몰래 매매 찬스</td>
+    <td width="50%"><img src="docs/screenshots/caught.png" alt="걸렸다" width="100%"><br><b>😨 딱 걸렸다</b><br>"회의 집중 좀 하지?" — 고과 -2</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/chat.png" alt="점심 제안" width="100%"><br><b>🍚 점심 제안</b><br>최부장이랑 같이 먹을까, 혼자 먹을까</td>
+    <td width="50%"><img src="docs/screenshots/chat2.png" alt="정보 획득" width="100%"><br><b>💡 정보 획득</b><br>친밀도 +3, "구골 빠질 것 같다" …카더라 통신, 믿어도 될까?</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/dinner.png" alt="회식" width="100%"><br><b>🍻 회식</b><br>거절은 거절한다 — 컨디션은 내일의 나에게</td>
+    <td width="50%"><img src="docs/screenshots/insider.png" alt="내부자 정보" width="100%"><br><b>🤫 내부자 정보</b><br>대박 확률 85%… 받을 것인가, 말 것인가</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/fss.png" alt="금감원 조사" width="100%"><br><b>🚨 금융감독원</b><br>3일 뒤 걸려온 전화 한 통 — 벌금에 고과 폭락</td>
+    <td width="50%"><img src="docs/screenshots/promotion.png" alt="승진" width="100%"><br><b>🎉 승진</b><br>60일마다 인사평가 — 고과 관리의 달콤한 보상</td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/screenshots/ending.png" alt="경제적 자유 엔딩" width="50%"><br><b>👑 경제적 자유</b><br>총자산 10억 달성 — …물론 내일도 출근은 해야 한다</td>
   </tr>
 </table>
 
