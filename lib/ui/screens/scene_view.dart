@@ -27,6 +27,9 @@ _Scene _sceneFor(GameController c) {
     case DayPhase.night:
       return const _Scene('💻', '미장 오픈. 노트북 앞에 앉는다');
     case DayPhase.work:
+      if (c.session.fired) {
+        return const _Scene('🏠', '백수의 아침... 이제 차트가 곧 출근이다');
+      }
       final block = c.session.todaySchedule.blockAt(clock.minuteOfDay);
       return _sceneForBlock(block?.kind);
   }

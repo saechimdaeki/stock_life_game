@@ -34,7 +34,18 @@ class _MeetingMinigameScreenState extends State<MeetingMinigameScreen> {
 
   void _onGameResult(bool success) {
     if (_phase != _Phase.playing) return;
+    if (!success) {
+      widget.controller.session.addPerformance(-2); // 상사한테 걸림
+      widget.controller.refresh();
+    }
     setState(() => _phase = success ? _Phase.choosing : _Phase.failed);
+  }
+
+  /// 딴짓 안 하고 회의에 집중 — 고과 +1.
+  void _focus() {
+    widget.controller.session.addPerformance(1);
+    widget.controller.refresh();
+    Navigator.pop(context);
   }
 
   void _joke() {
@@ -100,15 +111,16 @@ class _MeetingMinigameScreenState extends State<MeetingMinigameScreen> {
                     _onGameResult, widget.controller.session.minigameHandicap)),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('무시하고 계속', style: TextStyle(color: Colors.grey)),
+              onPressed: _focus,
+              child: const Text('회의에 집중한다 (고과 +1)',
+                  style: TextStyle(color: Colors.grey)),
             ),
           ],
         );
       case _Phase.failed:
         return _CenteredResult(
           emoji: '😨',
-          text: '상사한테 딱 걸렸다! "회의 집중 좀 하지?"',
+          text: '상사한테 딱 걸렸다! "회의 집중 좀 하지?" (고과 -2)',
           button: FilledButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('회의 계속'),

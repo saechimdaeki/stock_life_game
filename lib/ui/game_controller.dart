@@ -10,9 +10,11 @@ import '../data/game_session.dart';
 import '../data/news_feed.dart';
 import '../data/save_repository.dart';
 import '../engine/engine.dart';
+import 'format.dart';
+import 'screens/cutscene_screen.dart';
 
 /// 근무 블록 진입 시 뜨는 인터랙션 종류.
-enum WorkInteractionKind { meeting, smoke, lunch, dinner, coffee }
+enum WorkInteractionKind { meeting, smoke, lunch, dinner, coffee, insider }
 
 /// 대기 중인 근무 인터랙션 (UI가 감지해 모달로 띄운다).
 class WorkInteraction {
@@ -42,6 +44,7 @@ class GameController extends ChangeNotifier {
     final saved = _saves.load();
     if (saved != null) {
       _session = GameSession.fromJson(saved);
+      _collectMorningScenes(); // 복원 아침에도 평가/조사 컷씬이 뜬다.
     } else {
       _session = GameSession.newGame();
       _persist();
@@ -80,6 +83,93 @@ class GameController extends ChangeNotifier {
 
   /// 경제적 자유(총자산 10억) 달성 — UI가 엔딩 다이얼로그를 띄운다.
   bool pendingEnding = false;
+
+  /// 아침 컷씬 큐 (인사평가·내부자 조사). _SceneHost가 순서대로 소비한다.
+  final List<CutsceneData> pendingScenes = [];
+
+  /// 세션이 아침에 남긴 평가/조사 결과를 컷씬 데이터로 바꿔 큐에 넣는다.
+  void _collectMorningScenes() {
+    final s = _session;
+    final insider = s.lastInsiderOutcome;
+    if (insider != null) {
+      s.lastInsiderOutcome = null;
+      if (insider == InsiderOutcome.caught) {
+        pendingScenes.add(CutsceneData(
+          bgEmoji: '🚨',
+          title: '금융감독원',
+          lines: [
+            const CutsceneLine('출근길, 모르는 번호로 전화가 걸려온다.'),
+            CutsceneLine(
+                '${s.playerName}님 되시죠? 최근 ${s.lastInsiderStockName} '
+                '거래 건으로 확인할 게 있습니다.',
+                speaker: '금감원 조사관', emoji: '🕵️'),
+            const CutsceneLine('...등에서 식은땀이 흐른다.'),
+            CutsceneLine(
+                '벌금 ${won(s.lastInsiderFine)}이 부과됐다. 회사에도 소문이 돌았다 (고과 -5).'),
+          ],
+          choices: const ['...조심하자'],
+        ));
+      } else {
+        pendingScenes.add(CutsceneData(
+          bgEmoji: '😮‍💨',
+          title: '며칠 뒤',
+          lines: const [
+            CutsceneLine('그 거래를 묻는 사람은 아무도 없었다.'),
+            CutsceneLine('...이번엔 운이 좋았다. 다음에도 그럴까?'),
+          ],
+        ));
+      }
+    }
+    final review = s.lastReview;
+    if (review != null) {
+      s.lastReview = null;
+      switch (review) {
+        case ReviewOutcome.promoted:
+          pendingScenes.add(CutsceneData(
+            bgEmoji: '🎉',
+            title: '분기 인사평가',
+            lines: [
+              const CutsceneLine('회의실로 불려갔다.'),
+              const CutsceneLine('자네 요즘 태도가 아주 좋아. 계속 그렇게만 하게.',
+                  speaker: '상사', emoji: '🧑‍💼'),
+              CutsceneLine('축하하네. 오늘부로 ${s.rankTitle}일세.',
+                  speaker: '상사', emoji: '🧑‍💼'),
+              const CutsceneLine('승진했다! 월급이 오른다.'),
+            ],
+            choices: const ['감사합니다! 🙇'],
+          ));
+        case ReviewOutcome.warned:
+          pendingScenes.add(CutsceneData(
+            bgEmoji: '📉',
+            title: '분기 인사평가',
+            lines: [
+              const CutsceneLine('회의실로 불려갔다. 분위기가 싸늘하다.'),
+              const CutsceneLine('요즘 회의 때 정신이 어디 팔려 있나?',
+                  speaker: '상사', emoji: '😠'),
+              const CutsceneLine('경고장이야. 한 번 더면 짐 싸게 될 걸세.',
+                  speaker: '상사', emoji: '😠'),
+              CutsceneLine('경고 ${s.warnings}/2 — 다음 평가까지 고과를 올려야 한다.'),
+            ],
+            choices: const ['...죄송합니다'],
+          ));
+        case ReviewOutcome.fired:
+          pendingScenes.add(CutsceneData(
+            bgEmoji: '📦',
+            title: '해고 통보',
+            lines: const [
+              CutsceneLine('책상 위에 봉투가 하나 놓여 있다.'),
+              CutsceneLine('...미안하네. 더는 같이 못 가겠어.',
+                  speaker: '상사', emoji: '🧑‍💼'),
+              CutsceneLine('박스에 짐을 담았다. 이제 월급은 없다.'),
+              CutsceneLine('남은 건 계좌 하나. 전업투자자의 삶이 시작됐다.'),
+            ],
+            choices: const ['...주식으로 복수한다 🔥'],
+          ));
+        case ReviewOutcome.stay:
+          break; // 무난한 평가는 아침 공지로 충분.
+      }
+    }
+  }
 
   /// 새로 달성한 업적을 알림·피드로 띄우고, 10억 달성이면 엔딩을 건다.
   void _checkAchievements() {
@@ -194,6 +284,7 @@ class GameController extends ChangeNotifier {
   /// 근무 블록에 새로 진입하면 회의(미니게임)·상사외근(담배타임) 인터랙션을 띄운다.
   void _maybeTriggerInteraction() {
     if (pending != null) return;
+    if (_session.fired) return; // 백수는 회사 인터랙션 없음.
     final clock = _session.clock;
     // 저녁: 회식러 동료가 회식에 부른다(하루 1회, 확률적). 죽은 저녁시간 채우기.
     if (clock.phase == DayPhase.evening) {
@@ -231,8 +322,19 @@ class GameController extends ChangeNotifier {
         pending = WorkInteraction(WorkInteractionKind.lunch, colleague: c);
         pause();
       case WorkBlockKind.focus:
-        // 업무 몰입 중 인싸 동료가 커피 마시러 가자고 꼬신다 (확률적).
-        if (kInsiders.isNotEmpty && _rng.nextDouble() < 0.25) {
+        // 내부자 제안: 친한(40+) 고신뢰 동료가 낮은 확률로 은밀히 찌른다.
+        final whisperers = [
+          for (final c in kColleagues)
+            if (c.reliability >= 0.85 && _session.rapportOf(c.id) >= 40) c
+        ];
+        if (_session.insiderStockCode == null &&
+            whisperers.isNotEmpty &&
+            _rng.nextDouble() < 0.10) {
+          final c = whisperers[_rng.nextInt(whisperers.length)];
+          pending = WorkInteraction(WorkInteractionKind.insider, colleague: c);
+          pause();
+        } else if (kInsiders.isNotEmpty && _rng.nextDouble() < 0.25) {
+          // 업무 몰입 중 인싸 동료가 커피 마시러 가자고 꼬신다 (확률적).
           final c = kInsiders[_rng.nextInt(kInsiders.length)];
           pending = WorkInteraction(WorkInteractionKind.coffee, colleague: c);
           pause();
@@ -240,6 +342,30 @@ class GameController extends ChangeNotifier {
       case WorkBlockKind.report:
         break;
     }
+  }
+
+  /// 내부자 정보 수락: 랜덤 종목을 찍어주고, 내일 아침 pendingFollowUps로
+  /// 잭팟(85%)/헛소문(15%)이 터진다. 3일 뒤 아침에 조사 판정.
+  void acceptInsiderTip(Colleague from) {
+    final session = _session;
+    final stocks = session.market.listedStocks;
+    if (stocks.isEmpty) return;
+    final stock = stocks[_rng.nextInt(stocks.length)];
+    session.market.eventEngine.pendingFollowUps
+        .add((specId: 'insider_tip', stockCode: stock.code));
+    session.insiderStockCode = stock.code;
+    session.insiderResolveDay = session.clock.day + 3;
+    session.insiderFromId = from.id;
+    session.addRapport(from.id, 6);
+    session.pushNews(FeedItem(
+      minute: session.clock.minuteOfDay,
+      text: '🤫 「${from.name}」: ${stock.name}... 내일 아침 큰 거 떠. 진짜야.',
+      tone: 1,
+      channel: '귓속말',
+    ));
+    alert = '🤫 내부 정보 입수: ${stock.name}';
+    alertSeq++;
+    notifyListeners();
   }
 
   /// 인터랙션 종료(보상은 UI가 세션에 직접 적용). 몰래보기 중이면 재개하지 않는다.
@@ -353,6 +479,7 @@ class GameController extends ChangeNotifier {
     _session.endDay();
     await _persist();
     _session.startDay();
+    _collectMorningScenes(); // 평가·조사 결과 → 컷씬 큐
     _checkAchievements(); // Day 30 도달 등 아침 시점 업적
     _stage = DayStage.morning;
     notifyListeners();

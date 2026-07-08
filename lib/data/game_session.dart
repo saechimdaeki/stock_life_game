@@ -5,6 +5,12 @@ import 'achievements.dart';
 import 'colleague.dart';
 import 'news_feed.dart';
 
+/// 분기 인사평가 결과. 아침에 세션이 설정하고 UI가 컷씬으로 소비한다.
+enum ReviewOutcome { promoted, stay, warned, fired }
+
+/// 내부자 거래 조사 결과. 아침에 세션이 설정하고 UI가 컷씬으로 소비한다.
+enum InsiderOutcome { safe, caught }
+
 /// 엔진(시계·시장·포트폴리오)을 하나의 게임 세션으로 묶는다.
 /// 하루 루프 오케스트레이션과 저장/복원 직렬화를 담당한다.
 class GameSession {
@@ -51,8 +57,18 @@ class GameSession {
     (title: '임원', salary: 16000000),
   ];
 
-  /// 승진 주기: 60일(2개월)마다 한 직급씩.
+  /// 인사평가 주기: 60일마다 고과 점수로 승진/경고/해고를 가른다.
   static const int promotionIntervalDays = 60;
+
+  /// 평가 기준: 이 점수 이상이면 승진, 이하면 경고 (경고 2회 = 해고).
+  static const int promoteScore = 6;
+  static const int warnScore = -4;
+
+  /// 내부자 거래가 적발될 확률 (수락 3일 뒤 아침에 판정).
+  static const double insiderCatchChance = 0.30;
+
+  /// 적발 시 벌금: 총자산 대비 비율.
+  static const double insiderFineRate = 0.15;
 
   /// 일봉 저장 상한 (세이브 용량 관리).
   static const int maxCloseHistory = 120;
@@ -64,6 +80,30 @@ class GameSession {
 
   /// 현재 직급 인덱스 (0=사원).
   int rank = 0;
+
+  /// 이번 평가 기간 고과 점수. 회의 집중 +1, 걸림 -2, 내부자 적발 -5. 저장됨.
+  int performanceScore = 0;
+
+  /// 누적 경고 횟수. 2회면 해고. 저장됨.
+  int warnings = 0;
+
+  /// 해고 상태 — 월급·근무 인터랙션이 사라진다 (전업투자자). 저장됨.
+  bool fired = false;
+
+  /// 진행 중인 내부자 딜 (수락~조사 판정까지). 저장됨.
+  String? insiderStockCode;
+  int? insiderResolveDay;
+  String? insiderFromId;
+
+  /// 오늘 아침 발생한 평가/조사 결과 — UI(컨트롤러)가 컷씬으로 소비 후 비운다.
+  ReviewOutcome? lastReview;
+  InsiderOutcome? lastInsiderOutcome;
+  double lastInsiderFine = 0;
+  String lastInsiderStockName = '';
+
+  void addPerformance(int delta) {
+    performanceScore = (performanceScore + delta).clamp(-20, 20);
+  }
 
   /// 플레이어 정체성 (캐릭터 생성 화면에서 설정). 미설정이면 생성 화면 노출.
   String playerName = '';
@@ -217,15 +257,51 @@ class GameSession {
     drunk = false; // 자고 일어나면 술 깸
     todaySchedule = WorkSchedule.roll(Random(seed ^ (clock.day * 0x9E3779B9)));
     if (clock.day > 1) market.settleOvernight();
-    // 승진: 월급보다 먼저 처리해 오른 직급으로 지급.
-    if (clock.day > 1 &&
-        clock.day % promotionIntervalDays == 0 &&
-        rank < ranks.length - 1) {
-      final from = rankTitle;
-      rank += 1;
-      morningNotices.add('🎉 승진! $from → $rankTitle (월급 인상)');
+    // 내부자 거래 조사 판정 (평가보다 먼저 — 적발 시 고과 -5가 평가에 반영).
+    if (insiderResolveDay != null && clock.day >= insiderResolveDay!) {
+      final rng =
+          Random(seed ^ (clock.day * 0x51DEBA11) ^ insiderStockCode.hashCode);
+      lastInsiderStockName =
+          market.stockByCode(insiderStockCode!)?.name ?? insiderStockCode!;
+      if (rng.nextDouble() < insiderCatchChance) {
+        lastInsiderFine = (totalAssets * insiderFineRate).roundToDouble();
+        portfolio.cash -= lastInsiderFine;
+        addPerformance(-5);
+        lastInsiderOutcome = InsiderOutcome.caught;
+        morningNotices.add(
+            '🚨 금융감독원 조사 — 벌금 ${(lastInsiderFine / 10000).round()}만원, 고과 -5');
+      } else {
+        lastInsiderOutcome = InsiderOutcome.safe;
+        morningNotices.add('😮‍💨 그 거래... 아무도 묻지 않았다. 무사히 넘어갔다.');
+      }
+      insiderStockCode = null;
+      insiderResolveDay = null;
+      insiderFromId = null;
     }
-    if (clock.day > 1 && clock.day % salaryIntervalDays == 0) {
+    // 분기 인사평가: 고과 점수로 승진/유지/경고/해고. 월급보다 먼저 처리.
+    if (!fired && clock.day > 1 && clock.day % promotionIntervalDays == 0) {
+      if (performanceScore >= promoteScore && rank < ranks.length - 1) {
+        final from = rankTitle;
+        rank += 1;
+        lastReview = ReviewOutcome.promoted;
+        morningNotices.add('🎉 승진! $from → $rankTitle (월급 인상)');
+      } else if (performanceScore <= warnScore) {
+        warnings += 1;
+        if (warnings >= 2) {
+          fired = true;
+          lastReview = ReviewOutcome.fired;
+          morningNotices.add('📦 해고 통보. 이제 월급은 없다...');
+        } else {
+          lastReview = ReviewOutcome.warned;
+          morningNotices.add('⚠️ 인사평가 경고 ($warnings/2) — 한 번 더면 해고');
+        }
+      } else {
+        lastReview = ReviewOutcome.stay;
+        morningNotices.add('📋 분기 평가 통과 (고과 $performanceScore점)');
+      }
+      performanceScore = 0;
+    }
+    if (!fired && clock.day > 1 && clock.day % salaryIntervalDays == 0) {
       portfolio.cash += currentSalary;
       morningNotices.add(
           '월급날입니다! $rankTitle +${(currentSalary / 10000).round()}만원');
@@ -374,6 +450,12 @@ class GameSession {
         'seed': seed,
         'day': clock.day,
         'rank': rank,
+        'performanceScore': performanceScore,
+        'warnings': warnings,
+        'fired': fired,
+        'insiderStockCode': insiderStockCode,
+        'insiderResolveDay': insiderResolveDay,
+        'insiderFromId': insiderFromId,
         'condition': condition,
         'usdKrw': market.usdKrw,
         'achievements': achievements.toList(),
@@ -497,6 +579,12 @@ class GameSession {
       seed: seed,
     )
       ..rank = (json['rank'] as int?) ?? 0 // 구버전 세이브 하위호환
+      ..performanceScore = (json['performanceScore'] as int?) ?? 0
+      ..warnings = (json['warnings'] as int?) ?? 0
+      ..fired = (json['fired'] as bool?) ?? false
+      ..insiderStockCode = json['insiderStockCode'] as String?
+      ..insiderResolveDay = json['insiderResolveDay'] as int?
+      ..insiderFromId = json['insiderFromId'] as String?
       ..playerName = (json['playerName'] as String?) ?? ''
       ..avatarId = (json['avatarId'] as int?) ?? 0
       // 저장은 취침 직후(회복 전) 값 — 아래 startDay()가 회복을 적용한다.

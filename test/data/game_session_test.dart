@@ -35,12 +35,14 @@ void main() {
       }
     });
 
-    test('30일마다 월급, 60일마다 승진하며 월급이 오른다', () {
+    test('30일마다 월급, 60일차 평가에서 고과가 좋으면 승진해 월급이 오른다', () {
       final session = GameSession.newGame(seed: 2);
 
       double? day30Delta, day60Delta;
       for (var i = 0; i < 60; i++) {
         final before = session.portfolio.cash;
+        // 평가 직전까지 꾸준히 고과를 쌓는다 (회의 집중 등).
+        session.addPerformance(1);
         playThroughDay(session);
         final delta = session.portfolio.cash - before;
         if (session.clock.day == 30) day30Delta = delta;
@@ -48,7 +50,7 @@ void main() {
       }
       // 30일차: 사원 월급
       expect(day30Delta, GameSession.ranks[0].salary);
-      // 60일차: 주임으로 승진 후 오른 월급
+      // 60일차: 고과 충족 → 주임으로 승진 후 오른 월급
       expect(session.rank, 1);
       expect(day60Delta, GameSession.ranks[1].salary);
     });

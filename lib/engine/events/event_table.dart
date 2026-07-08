@@ -350,6 +350,22 @@ const List<EventSpec> kEventTable = [
     effect: EventEffect(jump: 1.22, muBonus: 0.30, durationDays: 2),
   ),
 
+  // ---- 내부자 정보 (weight 0 — 동료 제안 수락 시 pendingFollowUps로만 발생) ----
+  EventSpec(
+    id: 'insider_jackpot',
+    scope: EventScope.stock,
+    weight: 0,
+    headline: '{stock} 대형 호재 공시! 시장이 술렁인다',
+    effect: EventEffect(jump: 1.26, muBonus: 0.50, durationDays: 2),
+  ),
+  EventSpec(
+    id: 'insider_dud',
+    scope: EventScope.stock,
+    weight: 0,
+    headline: '{stock} 소문만 무성... 공시는 없었다',
+    effect: EventEffect(jump: 0.97, durationDays: 1),
+  ),
+
   // ---- 정기 매크로 짝 (weight 0 — kMacroSchedule로만 발생) ----
   EventSpec(
     id: 'us_cpi_cool',
@@ -371,6 +387,8 @@ const List<double> kDailyEventCountDist = [0.20, 0.50, 0.20, 0.10];
 const Map<String, ({String goodId, String badId, double pGood})> kFollowUps = {
   // M&A 루머는 대부분 무산된다 — 낚이면 펌핑분을 반납. 성공하면 잭팟.
   'ma_rumor': (goodId: 'ma_confirmed', badId: 'ma_collapse', pGood: 0.3),
+  // 내부자 정보: 수락한 다음 날 아침 85% 잭팟, 15% 헛소문.
+  'insider_tip': (goodId: 'insider_jackpot', badId: 'insider_dud', pGood: 0.85),
 };
 
 /// 정기 매크로 일정: day % [kMacroCycleDays] == offset인 아침에

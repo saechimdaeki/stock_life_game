@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 /// 미니게임이 끝나면 성공 여부를 알린다.
 typedef MiniGameResult = void Function(bool success);
@@ -33,9 +32,9 @@ const List<MiniGameSpec> kMiniGames = [
     build: _buildMash,
   ),
   MiniGameSpec(
-    name: '블록 부수기',
-    howTo: '패들을 움직여 공으로 블록을 모두 부숴라',
-    build: _buildBreakout,
+    name: '몰래 폰 보기',
+    howTo: '상사가 발표 볼 때만 꾹! 이쪽을 보면 손 떼라',
+    build: _buildSneak,
   ),
   MiniGameSpec(
     name: '순서 기억',
@@ -53,8 +52,8 @@ Widget _buildTiming(MiniGameResult r, double h) =>
     TimingGame(onResult: r, handicap: h);
 Widget _buildMash(MiniGameResult r, double h) =>
     MashGame(onResult: r, handicap: h);
-Widget _buildBreakout(MiniGameResult r, double h) =>
-    BreakoutGame(onResult: r, handicap: h);
+Widget _buildSneak(MiniGameResult r, double h) =>
+    SneakPeekGame(onResult: r, handicap: h);
 Widget _buildSequence(MiniGameResult r, double h) =>
     SequenceGame(onResult: r, handicap: h);
 Widget _buildNumberHunt(MiniGameResult r, double h) =>
@@ -248,209 +247,145 @@ class _MashGameState extends State<MashGame> {
 }
 
 // ---------------------------------------------------------------------------
-// 3) 블록 부수기: 패들을 드래그해 공으로 블록을 전부 부순다. 공을 놓치면 실패.
+// 3) 몰래 폰 보기: 상사가 발표를 볼 때만 버튼을 꾹 눌러 게이지를 채운다.
+//    상사가 이쪽을 볼 때 누르고 있으면 걸린다. 돌아보기 직전에 ❗ 경고가 뜬다.
 // ---------------------------------------------------------------------------
-class BreakoutGame extends StatefulWidget {
-  const BreakoutGame({super.key, required this.onResult, this.handicap = 0});
+class SneakPeekGame extends StatefulWidget {
+  const SneakPeekGame({super.key, required this.onResult, this.handicap = 0});
 
   final MiniGameResult onResult;
   final double handicap;
 
   @override
-  State<BreakoutGame> createState() => _BreakoutGameState();
+  State<SneakPeekGame> createState() => _SneakPeekGameState();
 }
 
-class _BreakoutGameState extends State<BreakoutGame>
-    with SingleTickerProviderStateMixin {
-  static const _r = 7.0;
+class _SneakPeekGameState extends State<SneakPeekGame> {
+  static const _tick = Duration(milliseconds: 50);
+  static const _fillSeconds = 2.4; // 누적 홀드 시간 목표
+  static const _grace = 0.22; // 상사가 돌아본 뒤 손 뗄 유예(초)
 
-  // 컨디션이 나쁘면 패들이 좁아진다 (78 → 58).
-  double get _paddleW => 78.0 - widget.handicap * 20;
-  static const _paddleH = 12.0;
-  static const _paddleBottom = 20.0;
+  // 컨디션이 나쁘면 경고가 짧아진다 (0.5s → 0.2s).
+  double get _warnTime => 0.5 - widget.handicap * 0.3;
 
-  late final Ticker _ticker;
-  Duration _last = Duration.zero;
-  Size _size = Size.zero;
-  bool _init = false;
+  final _rng = Random();
+  Timer? _timer;
   bool _done = false;
 
-  Offset _ball = Offset.zero;
-  Offset _vel = Offset.zero;
-  double _paddleCx = 0;
-  final List<Rect> _blocks = [];
+  double _gauge = 0;
+  double _timeLeft = 15;
+  bool _bossLooking = false;
+  double _phaseLeft = 2.0; // 현재 상사 상태 남은 시간
+  double _graceLeft = _grace;
+  bool _holding = false;
 
   @override
   void initState() {
     super.initState();
-    _ticker = createTicker(_tick)..start();
+    _timer = Timer.periodic(_tick, (_) => _step(0.05));
   }
 
   @override
   void dispose() {
-    _ticker.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
-  void _setup(Size s) {
-    _size = s;
-    _paddleCx = s.width / 2;
-    _ball = Offset(s.width / 2, s.height * 0.62);
-    final speed = s.height * 0.55;
-    _vel = Offset(speed * 0.45, -speed);
-    _vel = _vel / _vel.distance * speed;
-    _blocks.clear();
-    const cols = 5, rows = 2, gap = 6.0, bh = 16.0, top = 14.0;
-    final bw = (s.width - gap * (cols + 1)) / cols;
-    for (var r = 0; r < rows; r++) {
-      for (var c = 0; c < cols; c++) {
-        _blocks.add(
-            Rect.fromLTWH(gap + c * (bw + gap), top + r * (bh + gap), bw, bh));
+  void _step(double dt) {
+    if (_done) return;
+    _timeLeft -= dt;
+    _phaseLeft -= dt;
+
+    if (_phaseLeft <= 0) {
+      _bossLooking = !_bossLooking;
+      _phaseLeft = _bossLooking
+          ? 0.8 + _rng.nextDouble() * 0.8
+          : 1.2 + _rng.nextDouble() * 1.4;
+      _graceLeft = _grace;
+    }
+
+    if (_bossLooking && _holding) {
+      _graceLeft -= dt;
+      if (_graceLeft <= 0) {
+        _finish(false);
+        return;
       }
-    }
-    _init = true;
-  }
-
-  void _tick(Duration now) {
-    if (!_init || _done) {
-      _last = now;
-      return;
-    }
-    final dt = ((now - _last).inMicroseconds / 1e6).clamp(0.0, 0.033);
-    _last = now;
-    if (dt <= 0) return;
-
-    var p = _ball + _vel * dt;
-    var v = _vel;
-    if (p.dx < _r) {
-      p = Offset(_r, p.dy);
-      v = Offset(v.dx.abs(), v.dy);
-    } else if (p.dx > _size.width - _r) {
-      p = Offset(_size.width - _r, p.dy);
-      v = Offset(-v.dx.abs(), v.dy);
-    }
-    if (p.dy < _r) {
-      p = Offset(p.dx, _r);
-      v = Offset(v.dx, v.dy.abs());
-    }
-
-    final paddleTop = _size.height - _paddleBottom - _paddleH;
-    if (v.dy > 0 &&
-        p.dy + _r >= paddleTop &&
-        p.dy < paddleTop + _paddleH &&
-        p.dx > _paddleCx - _paddleW / 2 &&
-        p.dx < _paddleCx + _paddleW / 2) {
-      final off = ((p.dx - _paddleCx) / (_paddleW / 2)).clamp(-1.0, 1.0);
-      final speed = v.distance;
-      v = Offset(off * speed * 0.7, -v.dy.abs());
-      v = v / v.distance * speed;
-      p = Offset(p.dx, paddleTop - _r);
-    }
-
-    for (var i = 0; i < _blocks.length; i++) {
-      final b = _blocks[i];
-      if (p.dx > b.left - _r &&
-          p.dx < b.right + _r &&
-          p.dy > b.top - _r &&
-          p.dy < b.bottom + _r) {
-        _blocks.removeAt(i);
-        v = Offset(v.dx, -v.dy);
-        break;
+    } else if (_holding) {
+      _gauge += dt / _fillSeconds;
+      if (_gauge >= 1) {
+        _finish(true);
+        return;
       }
     }
 
-    if (p.dy > _size.height + _r) {
+    if (_timeLeft <= 0) {
       _finish(false);
       return;
     }
-    if (_blocks.isEmpty) {
-      _finish(true);
-      return;
-    }
-    setState(() {
-      _ball = p;
-      _vel = v;
-    });
+    setState(() {});
   }
 
   void _finish(bool ok) {
     if (_done) return;
     _done = true;
+    _timer?.cancel();
     widget.onResult(ok);
-  }
-
-  void _movePaddle(double x) {
-    setState(() =>
-        _paddleCx = x.clamp(_paddleW / 2, _size.width - _paddleW / 2));
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final s = Size(constraints.maxWidth, constraints.maxHeight);
-        if (s.isFinite && (!_init || s != _size)) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _setup(s));
-          });
-        }
-        return GestureDetector(
-          onPanUpdate: (d) => _movePaddle(d.localPosition.dx),
-          onTapDown: (d) => _movePaddle(d.localPosition.dx),
-          child: CustomPaint(
-            painter: _BreakoutPainter(
-              ball: _ball,
-              paddleCx: _paddleCx,
-              paddleTop: s.height - _paddleBottom - _paddleH,
-              paddleW: _paddleW,
-              paddleH: _paddleH,
-              r: _r,
-              blocks: _blocks,
+    final warning = !_bossLooking && _phaseLeft <= _warnTime;
+    final (emoji, label, color) = _bossLooking
+        ? ('👀', '이쪽을 본다!!', Colors.redAccent)
+        : warning
+            ? ('❗', '곧 돌아본다...', Colors.orange)
+            : ('🧑\u200d💼', '발표에 집중 중', Colors.green);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text('${_timeLeft.clamp(0, 15).toStringAsFixed(1)}s',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(emoji, style: const TextStyle(fontSize: 52)),
+        Text(label,
+            style: TextStyle(
+                color: color, fontSize: 14, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: _gauge.clamp(0.0, 1.0),
+              minHeight: 10,
+              color: Colors.tealAccent,
+              backgroundColor: Colors.white12,
             ),
-            child: const SizedBox.expand(),
           ),
-        );
-      },
+        ),
+        const SizedBox(height: 16),
+        GestureDetector(
+          onTapDown: (_) => _holding = true,
+          onTapUp: (_) => _holding = false,
+          onTapCancel: () => _holding = false,
+          child: Container(
+            width: 150,
+            height: 72,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _holding ? Colors.teal : Colors.teal.shade700,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Text('📱 몰래 보기 (꾹)',
+                style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ],
     );
   }
-}
-
-class _BreakoutPainter extends CustomPainter {
-  _BreakoutPainter({
-    required this.ball,
-    required this.paddleCx,
-    required this.paddleTop,
-    required this.paddleW,
-    required this.paddleH,
-    required this.r,
-    required this.blocks,
-  });
-
-  final Offset ball;
-  final double paddleCx;
-  final double paddleTop;
-  final double paddleW;
-  final double paddleH;
-  final double r;
-  final List<Rect> blocks;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final blockPaint = Paint()..color = Colors.tealAccent;
-    for (final b in blocks) {
-      canvas.drawRRect(
-          RRect.fromRectAndRadius(b, const Radius.circular(3)), blockPaint);
-    }
-    final paddle = Rect.fromLTWH(
-        paddleCx - paddleW / 2, paddleTop, paddleW, paddleH);
-    canvas.drawRRect(
-        RRect.fromRectAndRadius(paddle, const Radius.circular(6)),
-        Paint()..color = Colors.amber);
-    canvas.drawCircle(ball, r, Paint()..color = Colors.white);
-  }
-
-  @override
-  bool shouldRepaint(_BreakoutPainter old) => true;
 }
 
 // ---------------------------------------------------------------------------

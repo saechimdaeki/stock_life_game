@@ -159,10 +159,18 @@ class _ClockCard extends StatelessWidget {
     DayPhase.night: '심야 - 미장 시간',
   };
 
+  static const _phaseIcons = {
+    DayPhase.morning: '🌅',
+    DayPhase.work: '💼',
+    DayPhase.evening: '🌆',
+    DayPhase.night: '🌙',
+  };
+
   @override
   Widget build(BuildContext context) {
     final session = controller.session;
     final clock = session.clock;
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -181,8 +189,36 @@ class _ClockCard extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-                Text(clock.timeLabel,
-                    style: Theme.of(context).textTheme.headlineMedium),
+                // 현재 시각을 알약형 배지로 강조: 페이즈 아이콘 + 큰 고정폭 숫자.
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_phaseIcons[clock.phase]!,
+                          style: const TextStyle(fontSize: 18)),
+                      const SizedBox(width: 6),
+                      Text(
+                        clock.timeLabel,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              color: scheme.onPrimaryContainer,
+                              fontWeight: FontWeight.bold,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 6),
@@ -254,11 +290,22 @@ class _AssetCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.teal.withValues(alpha: 0.2),
+                    color: (session.fired ? Colors.redAccent : Colors.teal)
+                        .withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text('직급 ${session.rankTitle}',
-                      style: const TextStyle(fontSize: 12, color: Colors.teal)),
+                  child: Text(
+                      session.fired
+                          ? '무직 (해고됨)'
+                          : '직급 ${session.rankTitle} · 고과 '
+                              '${session.performanceScore >= 0 ? '+' : ''}'
+                              '${session.performanceScore}'
+                              '${session.warnings > 0 ? ' ⚠️${session.warnings}' : ''}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: session.fired
+                              ? Colors.redAccent
+                              : Colors.teal)),
                 ),
               ],
             ),

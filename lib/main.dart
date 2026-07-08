@@ -9,6 +9,8 @@ import 'ui/game_controller.dart';
 import 'ui/screens/character_creation_screen.dart';
 import 'ui/screens/colleague_chat_sheet.dart';
 import 'ui/screens/colleagues_screen.dart';
+import 'ui/screens/cutscene_screen.dart';
+import 'ui/screens/interaction_scenes.dart';
 import 'ui/screens/home_screen.dart';
 import 'ui/screens/market_screen.dart';
 import 'ui/screens/meeting_minigame_screen.dart';
@@ -93,6 +95,7 @@ class _MainShellState extends State<MainShell> {
           IndexedStack(index: _index, children: _screens),
           const Positioned(top: 8, left: 8, right: 8, child: _GameAlertBanner()),
           const _InteractionHost(),
+          const _MorningSceneHost(),
           const _EndingHost(),
         ],
       ),
@@ -134,6 +137,14 @@ class _InteractionHostState extends ConsumerState<_InteractionHost> {
   }
 
   Future<void> _run(GameController controller, WorkInteraction interaction) async {
+    // 진입 컷씬: 옥상/탕비실/식당/회식/회의실로 장면 전환 후 본 인터랙션.
+    if (interaction.kind != WorkInteractionKind.insider) {
+      await showCutscene(context, introSceneFor(interaction));
+      if (!mounted) {
+        controller.resolveInteraction();
+        return;
+      }
+    }
     switch (interaction.kind) {
       case WorkInteractionKind.smoke:
       case WorkInteractionKind.lunch:
@@ -158,8 +169,57 @@ class _InteractionHostState extends ConsumerState<_InteractionHost> {
           fullscreenDialog: true,
           builder: (_) => MeetingMinigameScreen(controller: controller),
         ));
+      case WorkInteractionKind.insider:
+        final c = interaction.colleague!;
+        final picked = await showCutscene(
+          context,
+          CutsceneData(
+            bgEmoji: '🤫',
+            title: '탕비실에서',
+            lines: [
+              CutsceneLine('${c.name}이(가) 슬쩍 다가와 주위를 둘러본다.'),
+              CutsceneLine('...이거 진짜 아무한테도 말하면 안 되는 건데.',
+                  speaker: c.name, avatarId: c.avatarId),
+              CutsceneLine('내일 아침에 공시 하나 크게 떠. 받을 거야, 말 거야?',
+                  speaker: c.name, avatarId: c.avatarId),
+              const CutsceneLine('내부자 정보다. 대박 확률이 높지만... 걸리면 벌금에 고과 폭락이다.'),
+            ],
+            choices: const ['🤝 받는다 (위험 감수)', '🙅 못 들은 걸로 할게'],
+          ),
+        );
+        if (picked == 0) controller.acceptInsiderTip(c);
     }
     controller.resolveInteraction();
+    if (mounted) setState(() => _showing = false);
+  }
+}
+
+/// 아침 컷씬(인사평가·내부자 조사)을 순서대로 띄운다.
+class _MorningSceneHost extends ConsumerStatefulWidget {
+  const _MorningSceneHost();
+
+  @override
+  ConsumerState<_MorningSceneHost> createState() => _MorningSceneHostState();
+}
+
+class _MorningSceneHostState extends ConsumerState<_MorningSceneHost> {
+  bool _showing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = ref.watch(gameControllerProvider);
+    if (controller.pendingScenes.isNotEmpty && !_showing) {
+      _showing = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _run(controller));
+    }
+    return const SizedBox.shrink();
+  }
+
+  Future<void> _run(GameController controller) async {
+    while (controller.pendingScenes.isNotEmpty && mounted) {
+      final scene = controller.pendingScenes.removeAt(0);
+      await showCutscene(context, scene);
+    }
     if (mounted) setState(() => _showing = false);
   }
 }
