@@ -10,13 +10,31 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 bool get _supported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
-// TODO: 출시 전 실제 AdMob 광고 단위 ID로 교체 (지금은 구글 공식 테스트 ID).
-String get _rewardedUnitId => Platform.isAndroid
+// 실제 AdMob 광고 단위 ID (Android)는 저장소에 커밋하지 않고 릴리즈 빌드 시
+// --dart-define으로 주입한다 (tool/build_release.sh, git 미포함). 미주입이면
+// 빈 문자열이라 아래 게터가 테스트 ID로 폴백한다.
+const _prodRewardedAndroid = String.fromEnvironment('ADMOB_REWARDED_ANDROID');
+const _prodBannerAndroid = String.fromEnvironment('ADMOB_BANNER_ANDROID');
+
+// 구글 공식 테스트 광고 단위 ID. 디버그 빌드에서 실제 광고를 노출/클릭하면
+// 무효 트래픽으로 계정이 정지될 수 있어, 디버그에선 항상 테스트 ID를 쓴다.
+String get _testRewardedUnitId => Platform.isAndroid
     ? 'ca-app-pub-3940256099942544/5224354917'
     : 'ca-app-pub-3940256099942544/1712485313';
-String get _bannerUnitId => Platform.isAndroid
+String get _testBannerUnitId => Platform.isAndroid
     ? 'ca-app-pub-3940256099942544/6300978111'
     : 'ca-app-pub-3940256099942544/2934735716';
+
+// 릴리즈에서만 실제 ID. 실제 ID가 비어 있거나(미발급) iOS(앱 미등록)면
+// 테스트 ID로 폴백한다.
+String get _rewardedUnitId =>
+    kDebugMode || !Platform.isAndroid || _prodRewardedAndroid.isEmpty
+        ? _testRewardedUnitId
+        : _prodRewardedAndroid;
+String get _bannerUnitId =>
+    kDebugMode || !Platform.isAndroid || _prodBannerAndroid.isEmpty
+        ? _testBannerUnitId
+        : _prodBannerAndroid;
 
 RewardedAd? _rewarded;
 bool _initialized = false;

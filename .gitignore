@@ -44,3 +44,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .codegraph/
+
+# AdMob 실제 ID (커밋 금지 — *.example 템플릿 참고)
+/android/admob.properties
+/tool/build_release.sh

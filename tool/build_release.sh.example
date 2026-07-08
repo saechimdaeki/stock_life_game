@@ -1,0 +1,10 @@
+#!/bin/sh
+## 릴리즈 빌드 템플릿. build_release.sh로 복사해 실제 AdMob 광고 단위 ID를 넣는다
+## (build_release.sh는 git 미포함). 미주입 빌드는 구글 테스트 광고 ID로 폴백한다.
+## 앱 ID는 android/admob.properties.example 참고.
+set -e
+cd "$(dirname "$0")/.."
+flutter build appbundle \
+  --dart-define=ADMOB_REWARDED_ANDROID=ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX \
+  --dart-define=ADMOB_BANNER_ANDROID=ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX \
+  "$@"

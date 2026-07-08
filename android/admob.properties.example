@@ -1,0 +1,4 @@
+## AdMob 실제 앱 ID 주입용 템플릿.
+## 이 파일을 admob.properties로 복사하고 실제 값을 넣는다 (admob.properties는 git 미포함).
+## 파일이 없으면 빌드는 구글 테스트 앱 ID로 폴백한다.
+admobAppId=ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX

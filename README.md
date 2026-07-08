@@ -118,7 +118,7 @@
 - **보상형 광고 3종**: 📊 애널리스트 리포트(재료 살아있는 종목의 진짜 방향+잔여일, 하루 1회) / ⏭ 하루 통째 스킵(아침 브리핑에서 바로 정산으로) / 🆘 구제금융(총자산 300만원 미만일 때 500만원 지원, 게임당 3회)
 - **배너 광고**: 하루 정산 다이얼로그 하단
 - UMP 동의 플로우(EEA) 내장. 웹·데스크톱·테스트에서는 광고 없이 보상만 주는 스텁으로 동작해 개발 흐름이 끊기지 않음
-- 현재는 구글 공식 테스트 광고 ID — 출시 전 실제 AdMob ID로 교체 필요(`lib/ads/ads_real.dart`, `AndroidManifest.xml`, `Info.plist`의 TODO)
+- 실제 AdMob ID는 저장소에 커밋하지 않음: 앱 ID는 `android/admob.properties`(gradle 주입), 광고 단위 ID는 `tool/build_release.sh`의 `--dart-define`으로 주입 — 각각 `*.example` 템플릿 참고. 미주입/디버그 빌드는 항상 구글 테스트 광고 ID로 폴백
 
 ### 비주얼 · 사운드
 - 컷씬 시네마틱: 레터박스 + 대사 타자기 연출 + 배경 Ken Burns, `assets/videos/`에 mp4를 넣으면 배경 영상 재생
