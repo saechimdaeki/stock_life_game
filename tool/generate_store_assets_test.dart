@@ -4,17 +4,61 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// 스토어/런처 그래픽 생성기. 아트 에셋이 생기기 전까지 쓰는 코드 폴백.
+/// 스토어/런처 그래픽 생성기.
 ///
 ///   flutter test tool/generate_store_assets_test.dart
 ///
+/// assets/icon/source_art.png(정사각 원본 아트)가 있으면 그걸 크롭해 쓰고,
+/// 없으면 코드로 그린 벡터 차트로 폴백한다.
+///
 /// 생성물:
 ///   assets/icon/app_icon.png     1024x1024 런처 아이콘 (배경 포함)
-///   assets/icon/app_icon_fg.png  1024x1024 어댑티브 전경 (투명 배경, 세이프존)
+///   assets/icon/app_icon_fg.png  1024x1024 어댑티브 전경 (마스크로 33%가 잘리므로
+///                                캐릭터 중심 타이트 크롭)
 ///   docs/store/icon_512.png      Play Console 앱 아이콘
 ///   docs/store/feature_graphic.png 1024x500 Play 그래픽 이미지
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  Future<void> savePng(ui.Picture picture, int w, int h, String path) async {
+    final image = await picture.toImage(w, h);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    File(path)
+      ..parent.createSync(recursive: true)
+      ..writeAsBytesSync(data!.buffer.asUint8List());
+  }
+
+  // ---- 원본 아트 크롭 경로 ----
+
+  Future<ui.Image?> loadSourceArt() async {
+    final f = File('assets/icon/source_art.png');
+    if (!f.existsSync()) return null;
+    final codec = await ui.instantiateImageCodec(f.readAsBytesSync());
+    return (await codec.getNextFrame()).image;
+  }
+
+  /// [src]의 [crop] 영역을 [w]x[h]로 그린다.
+  ui.Picture cropPicture(ui.Image src, Rect crop, int w, int h) {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawImageRect(
+      src,
+      crop,
+      Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+      Paint()..filterQuality = FilterQuality.high,
+    );
+    return recorder.endRecording();
+  }
+
+  // 원본(2048 기준) 크롭 영역. 소스 아트를 바꾸면 여기만 조정한다.
+  // 픽셀 테두리·바깥 여백 안쪽의 장면 전체 (라운드 코너의 테두리까지 피함).
+  const artScene = Rect.fromLTWH(405, 405, 1240, 1240);
+  // 어댑티브 전경: 마스크(중앙 66%) 안에 캐릭터가 온전히 들어오게 타이트 크롭.
+  const artCharacter = Rect.fromLTWH(300, 340, 1240, 1240);
+  // 그래픽 이미지(2.048:1): 얼굴~차트가 걸치는 중앙 가로 슬라이스.
+  const artBanner = Rect.fromLTWH(300, 560, 1450, 708);
+
+  // ---- 벡터 폴백 경로 ----
 
   const bgTop = Color(0xFF262D33);
   const bgBottom = Color(0xFF14181B);
@@ -31,7 +75,7 @@ void main() {
   ];
 
   /// [area] 안에 캔들 4개 + 우상향 화살표를 그린다.
-  void drawChart(Canvas canvas, Rect area, {double scale = 1}) {
+  void drawChart(Canvas canvas, Rect area) {
     final bodyW = area.width * 0.15;
     final wick = Paint()
       ..strokeWidth = area.width * 0.030
@@ -52,7 +96,6 @@ void main() {
         Paint()..color = color,
       );
     }
-    // 우상향 라인 + 화살촉.
     final stroke = area.width * 0.055;
     final path = Path()
       ..moveTo(area.left - stroke, area.top + area.height * 1.02)
@@ -78,14 +121,6 @@ void main() {
     canvas.drawPath(head, Paint()..color = line);
   }
 
-  Future<void> savePng(ui.Picture picture, int w, int h, String path) async {
-    final image = await picture.toImage(w, h);
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    File(path)
-      ..parent.createSync(recursive: true)
-      ..writeAsBytesSync(data!.buffer.asUint8List());
-  }
-
   Paint bgPaint(Rect rect) => Paint()
     ..shader = const LinearGradient(
       begin: Alignment.topCenter,
@@ -94,41 +129,60 @@ void main() {
     ).createShader(rect);
 
   test('런처 아이콘 1024 (배경 포함)', () async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    const rect = Rect.fromLTWH(0, 0, 1024, 1024);
-    canvas.drawRect(rect, bgPaint(rect));
-    drawChart(canvas, const Rect.fromLTWH(182, 212, 660, 620));
-    await savePng(recorder.endRecording(), 1024, 1024,
-        'assets/icon/app_icon.png');
+    final art = await loadSourceArt();
+    final ui.Picture picture;
+    if (art != null) {
+      picture = cropPicture(art, artScene, 1024, 1024);
+    } else {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      const rect = Rect.fromLTWH(0, 0, 1024, 1024);
+      canvas.drawRect(rect, bgPaint(rect));
+      drawChart(canvas, const Rect.fromLTWH(182, 212, 660, 620));
+      picture = recorder.endRecording();
+    }
+    await savePng(picture, 1024, 1024, 'assets/icon/app_icon.png');
   });
 
-  test('어댑티브 전경 1024 (투명 배경, 세이프존 66%)', () async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    drawChart(canvas, Rect.fromCenter(
-        center: const Offset(512, 512), width: 520, height: 500));
-    await savePng(recorder.endRecording(), 1024, 1024,
-        'assets/icon/app_icon_fg.png');
+  test('어댑티브 전경 1024', () async {
+    final art = await loadSourceArt();
+    final ui.Picture picture;
+    if (art != null) {
+      picture = cropPicture(art, artCharacter, 1024, 1024);
+    } else {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      drawChart(canvas, Rect.fromCenter(
+          center: const Offset(512, 512), width: 520, height: 500));
+      picture = recorder.endRecording();
+    }
+    await savePng(picture, 1024, 1024, 'assets/icon/app_icon_fg.png');
   });
 
   test('Play 스토어 아이콘 512 + 그래픽 이미지 1024x500', () async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    const rect = Rect.fromLTWH(0, 0, 512, 512);
-    canvas.drawRect(rect, bgPaint(rect));
-    drawChart(canvas, const Rect.fromLTWH(91, 106, 330, 310));
-    await savePng(recorder.endRecording(), 512, 512,
-        'docs/store/icon_512.png');
+    final art = await loadSourceArt();
+    final ui.Picture icon;
+    final ui.Picture banner;
+    if (art != null) {
+      icon = cropPicture(art, artScene, 512, 512);
+      banner = cropPicture(art, artBanner, 1024, 500);
+    } else {
+      final r1 = ui.PictureRecorder();
+      final c1 = Canvas(r1);
+      const rect = Rect.fromLTWH(0, 0, 512, 512);
+      c1.drawRect(rect, bgPaint(rect));
+      drawChart(c1, const Rect.fromLTWH(91, 106, 330, 310));
+      icon = r1.endRecording();
 
-    final fg = ui.PictureRecorder();
-    final c2 = Canvas(fg);
-    const banner = Rect.fromLTWH(0, 0, 1024, 500);
-    c2.drawRect(banner, bgPaint(banner));
-    // 좌측은 스토어 목록에서 앱 이름과 겹치는 영역이라 비워 두고, 우측에 차트.
-    drawChart(c2, const Rect.fromLTWH(560, 70, 400, 360));
-    drawChart(c2, const Rect.fromLTWH(120, 170, 260, 240));
-    await savePng(fg.endRecording(), 1024, 500,
-        'docs/store/feature_graphic.png');
+      final r2 = ui.PictureRecorder();
+      final c2 = Canvas(r2);
+      const b = Rect.fromLTWH(0, 0, 1024, 500);
+      c2.drawRect(b, bgPaint(b));
+      drawChart(c2, const Rect.fromLTWH(560, 70, 400, 360));
+      drawChart(c2, const Rect.fromLTWH(120, 170, 260, 240));
+      banner = r2.endRecording();
+    }
+    await savePng(icon, 512, 512, 'docs/store/icon_512.png');
+    await savePng(banner, 1024, 500, 'docs/store/feature_graphic.png');
   });
 }
