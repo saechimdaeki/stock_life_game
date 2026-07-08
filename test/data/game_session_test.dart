@@ -36,7 +36,8 @@ void main() {
     });
 
     test('30일마다 월급, 60일차 평가에서 고과가 좋으면 승진해 월급이 오른다', () {
-      final session = GameSession.newGame(seed: 2);
+      // 아바타 1(금수저)은 월급 특성이 없어 기본 월급으로 검증한다.
+      final session = GameSession.newGame(seed: 2)..avatarId = 1;
 
       double? day30Delta, day60Delta;
       for (var i = 0; i < 60; i++) {

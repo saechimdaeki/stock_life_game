@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/game_session.dart';
 import '../character/character_avatar.dart';
 import '../game_controller.dart';
 
@@ -49,7 +50,23 @@ class _CharacterCreationScreenState
                     Center(
                         child:
                             CharacterAvatar(avatarId: _avatarId, size: 96)),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
+                    // 선택한 아바타의 고유 특성.
+                    Center(
+                      child: Column(
+                        children: [
+                          Text('✨ ${kTraits[_avatarId].name}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.teal)),
+                          const SizedBox(height: 2),
+                          Text(kTraits[_avatarId].desc,
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                     Wrap(
                       alignment: WrapAlignment.center,
                       spacing: 12,

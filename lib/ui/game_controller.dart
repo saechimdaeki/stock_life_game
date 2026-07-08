@@ -489,6 +489,9 @@ class GameController extends ChangeNotifier {
   Future<void> setIdentity(String name, int avatarId) async {
     _session.playerName = name;
     _session.avatarId = avatarId;
+    // 특성: 시작 자금 보너스는 캐릭터 확정 시 1회만 적용.
+    _session.portfolio.cash +=
+        GameSession.initialCash * (_session.trait.cashMul - 1);
     await _persist();
     notifyListeners();
   }

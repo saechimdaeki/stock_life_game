@@ -11,6 +11,42 @@ enum ReviewOutcome { promoted, stay, warned, fired }
 /// 내부자 거래 조사 결과. 아침에 세션이 설정하고 UI가 컷씬으로 소비한다.
 enum InsiderOutcome { safe, caught }
 
+/// 아바타별 고유 특성 (로그라이크 시작 보너스). avatarId가 곧 인덱스라 따로 저장하지 않는다.
+class PlayerTrait {
+  const PlayerTrait(this.name, this.desc,
+      {this.cashMul = 1.0,
+      this.salaryMul = 1.0,
+      this.rapportMul = 1.0,
+      this.catchChance,
+      this.fineMul = 1.0,
+      this.sleepBonus = 0,
+      this.reviewBonus = 0,
+      this.pokerFace = false});
+
+  final String name;
+  final String desc;
+  final double cashMul; // 시작 자금 배수 (setIdentity에서 1회 적용)
+  final double salaryMul; // 월급 배수
+  final double rapportMul; // 호감도 획득 배수 (플러스만)
+  final double? catchChance; // 금감원 적발 확률 (null = 기본 30%)
+  final double fineMul; // 벌금 배수
+  final int sleepBonus; // 수면 컨디션 회복 추가량
+  final int reviewBonus; // 인사평가 판정 시 고과 보정
+  final bool pokerFace; // 컨디션 미니게임 페널티 무시
+}
+
+/// 아바타 순서(0~7)와 1:1 대응.
+const List<PlayerTrait> kTraits = [
+  PlayerTrait('성실의 아이콘', '월급 +15%', salaryMul: 1.15),
+  PlayerTrait('금수저', '시작 자금 +50%', cashMul: 1.5),
+  PlayerTrait('타고난 인싸', '동료 호감도가 2배로 오른다', rapportMul: 2),
+  PlayerTrait('동물적인 촉', '금감원 적발 확률 30% → 15%', catchChance: 0.15),
+  PlayerTrait('처세의 달인', '인사평가 때 고과 +2 보정', reviewBonus: 2),
+  PlayerTrait('강철 체력', '잠만 자면 컨디션 +15 추가 회복', sleepBonus: 15),
+  PlayerTrait('포커페이스', '아무리 피곤해도 미니게임 페널티 없음', pokerFace: true),
+  PlayerTrait('변호사 친구', '모든 벌금 50% 감면', fineMul: 0.5),
+];
+
 /// 엔진(시계·시장·포트폴리오)을 하나의 게임 세션으로 묶는다.
 /// 하루 루프 오케스트레이션과 저장/복원 직렬화를 담당한다.
 class GameSession {
@@ -107,6 +143,9 @@ class GameSession {
 
   /// 플레이어 정체성 (캐릭터 생성 화면에서 설정). 미설정이면 생성 화면 노출.
   String playerName = '';
+
+  /// 선택한 아바타의 고유 특성.
+  PlayerTrait get trait => kTraits[avatarId % kTraits.length];
   int avatarId = 0;
 
   /// 동료별 친밀도 0~100 (id -> rapport). 저장됨.
@@ -134,7 +173,7 @@ class GameSession {
 
   /// 미니게임 난이도 페널티 0~1. 컨디션 40 미만부터 걸린다.
   double get minigameHandicap =>
-      condition >= 40 ? 0 : (40 - condition) / 40;
+      trait.pokerFace || condition >= 40 ? 0 : (40 - condition) / 40;
 
   /// 피곤해서 차트가 흐려 보이는 상태 (취함 효과 재사용).
   bool get tooTired => condition < 30;
@@ -190,6 +229,7 @@ class GameSession {
   int rapportOf(String id) => rapport[id] ?? 0;
 
   void addRapport(String id, int delta) {
+    if (delta > 0) delta = (delta * trait.rapportMul).round();
     rapport[id] = (rapportOf(id) + delta).clamp(0, 100);
   }
 
@@ -230,7 +270,7 @@ class GameSession {
   }
 
   String get rankTitle => ranks[rank].title;
-  double get currentSalary => ranks[rank].salary;
+  double get currentSalary => ranks[rank].salary * trait.salaryMul;
 
   /// 오늘 아침 기준 총자산 (오늘 손익 표시용).
   double morningAssets = initialCash;
@@ -252,7 +292,8 @@ class GameSession {
     morningNotices.clear();
     todayTips.clear();
     // 수면 회복: 취한 채 자면 덜 회복된다.
-    condition = (condition + (drunk ? 20 : 30)).clamp(0, 100);
+    condition =
+        (condition + (drunk ? 20 : 30) + trait.sleepBonus).clamp(0, 100);
     _nightTradePenalized = false;
     drunk = false; // 자고 일어나면 술 깸
     todaySchedule = WorkSchedule.roll(Random(seed ^ (clock.day * 0x9E3779B9)));
@@ -263,8 +304,9 @@ class GameSession {
           Random(seed ^ (clock.day * 0x51DEBA11) ^ insiderStockCode.hashCode);
       lastInsiderStockName =
           market.stockByCode(insiderStockCode!)?.name ?? insiderStockCode!;
-      if (rng.nextDouble() < insiderCatchChance) {
-        lastInsiderFine = (totalAssets * insiderFineRate).roundToDouble();
+      if (rng.nextDouble() < (trait.catchChance ?? insiderCatchChance)) {
+        lastInsiderFine =
+            (totalAssets * insiderFineRate * trait.fineMul).roundToDouble();
         portfolio.cash -= lastInsiderFine;
         addPerformance(-5);
         lastInsiderOutcome = InsiderOutcome.caught;
@@ -280,12 +322,13 @@ class GameSession {
     }
     // 분기 인사평가: 고과 점수로 승진/유지/경고/해고. 월급보다 먼저 처리.
     if (!fired && clock.day > 1 && clock.day % promotionIntervalDays == 0) {
-      if (performanceScore >= promoteScore && rank < ranks.length - 1) {
+      final reviewScore = performanceScore + trait.reviewBonus; // 특성 보정
+      if (reviewScore >= promoteScore && rank < ranks.length - 1) {
         final from = rankTitle;
         rank += 1;
         lastReview = ReviewOutcome.promoted;
         morningNotices.add('🎉 승진! $from → $rankTitle (월급 인상)');
-      } else if (performanceScore <= warnScore) {
+      } else if (reviewScore <= warnScore) {
         warnings += 1;
         if (warnings >= 2) {
           fired = true;
