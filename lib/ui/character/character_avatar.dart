@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// 아바타 스타일 프리셋. 코드로 그리는 플랫 캐릭터(피부·헤어·옷·안경).
 /// `assets/images/avatar_<id>.png`를 넣으면 그 이미지로 대체된다.
@@ -77,7 +78,13 @@ const List<_AvatarStyle> _styles = [
 
 int get avatarCount => _styles.length;
 
-/// 원형 아바타. 에셋 이미지가 있으면 사용, 없으면 벡터로 그린다.
+/// 캐릭터 시트: 8칸(4열×2행) 한 장짜리 스프라이트 시트. 이 파일이 있으면
+/// 개별 `avatar_<id>.png`보다 우선한다 (아트 교체는 시트 한 장만 갈면 끝).
+const String _kSheetPath = 'assets/images/avatar_sheet.png';
+const int _kSheetCols = 4;
+const int _kSheetRows = 2;
+
+/// 원형 아바타. 우선순위: 캐릭터 시트 → 개별 PNG → 벡터 폴백.
 class CharacterAvatar extends StatelessWidget {
   const CharacterAvatar({
     super.key,
@@ -90,9 +97,27 @@ class CharacterAvatar extends StatelessWidget {
   final double size;
   final bool selected;
 
+  // async로 감싸야 테스트 환경의 동기 throw까지 잡힌다.
+  static final Future<bool> _hasSheet = () async {
+    try {
+      await rootBundle.load(_kSheetPath);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }();
+
   @override
   Widget build(BuildContext context) {
     final style = _styles[avatarId % _styles.length];
+    final fallback = Image.asset(
+      'assets/images/avatar_$avatarId.png',
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => CustomPaint(
+        painter: _AvatarPainter(style),
+        child: const SizedBox.expand(),
+      ),
+    );
     return Container(
       width: size,
       height: size,
@@ -102,13 +127,37 @@ class CharacterAvatar extends StatelessWidget {
             color: selected ? Colors.teal : Colors.transparent, width: 3),
       ),
       child: ClipOval(
-        child: Image.asset(
-          'assets/images/avatar_$avatarId.png',
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => CustomPaint(
-            painter: _AvatarPainter(style),
-            child: const SizedBox.expand(),
-          ),
+        child: FutureBuilder<bool>(
+          future: _hasSheet,
+          builder: (_, snap) =>
+              snap.data == true ? _SheetCell(avatarId: avatarId) : fallback,
+        ),
+      ),
+    );
+  }
+}
+
+/// 시트에서 아바타 한 칸을 잘라 채운다.
+class _SheetCell extends StatelessWidget {
+  const _SheetCell({required this.avatarId});
+
+  final int avatarId;
+
+  @override
+  Widget build(BuildContext context) {
+    final id = avatarId % (_kSheetCols * _kSheetRows);
+    final col = id % _kSheetCols;
+    final row = id ~/ _kSheetCols;
+    return FittedBox(
+      fit: BoxFit.cover,
+      clipBehavior: Clip.hardEdge,
+      child: ClipRect(
+        child: Align(
+          alignment: FractionalOffset(
+              col / (_kSheetCols - 1), row / (_kSheetRows - 1)),
+          widthFactor: 1 / _kSheetCols,
+          heightFactor: 1 / _kSheetRows,
+          child: Image.asset(_kSheetPath),
         ),
       ),
     );

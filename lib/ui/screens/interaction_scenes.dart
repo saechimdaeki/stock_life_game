@@ -10,11 +10,17 @@ final Random _rng = Random();
 
 T _pick<T>(List<T> list) => list[_rng.nextInt(list.length)];
 
+/// `assets/videos/scene_<kind>.mp4`가 있으면 컷씬 배경 영상으로 재생된다.
+String _videoFor(WorkInteractionKind kind) =>
+    'assets/videos/scene_${kind.name}.mp4';
+
 CutsceneData introSceneFor(WorkInteraction i) {
   final c = i.colleague;
+  final video = _videoFor(i.kind);
   switch (i.kind) {
     case WorkInteractionKind.meeting:
       return CutsceneData(
+        video: video,
         bgEmoji: '🗣️',
         title: '회의 소집',
         lines: [
@@ -32,6 +38,7 @@ CutsceneData introSceneFor(WorkInteraction i) {
       );
     case WorkInteractionKind.smoke:
       return CutsceneData(
+        video: video,
         bgEmoji: '🚬',
         title: '옥상 흡연장',
         lines: [
@@ -49,6 +56,7 @@ CutsceneData introSceneFor(WorkInteraction i) {
       );
     case WorkInteractionKind.coffee:
       return CutsceneData(
+        video: video,
         bgEmoji: '☕',
         title: '커피 타임',
         lines: [
@@ -66,6 +74,7 @@ CutsceneData introSceneFor(WorkInteraction i) {
       );
     case WorkInteractionKind.lunch:
       return CutsceneData(
+        video: video,
         bgEmoji: '🍚',
         title: '점심시간',
         lines: [
@@ -83,6 +92,7 @@ CutsceneData introSceneFor(WorkInteraction i) {
       );
     case WorkInteractionKind.dinner:
       return CutsceneData(
+        video: video,
         bgEmoji: '🍻',
         title: '회식',
         lines: [

@@ -4,17 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'data/save_repository.dart';
-import 'ui/format.dart';
 import 'ui/game_controller.dart';
 import 'ui/screens/character_creation_screen.dart';
 import 'ui/screens/colleague_chat_sheet.dart';
 import 'ui/screens/colleagues_screen.dart';
 import 'ui/screens/cutscene_screen.dart';
+import 'ui/screens/ending_screen.dart';
 import 'ui/screens/interaction_scenes.dart';
 import 'ui/screens/home_screen.dart';
 import 'ui/screens/market_screen.dart';
 import 'ui/screens/meeting_minigame_screen.dart';
 import 'ui/screens/portfolio_screen.dart';
+import 'ui/sound.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -89,6 +90,18 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    Sfx.startBgm();
+  }
+
+  @override
+  void dispose() {
+    Sfx.stopBgm();
+    super.dispose();
+  }
 
   static const _screens = [
     HomeScreen(),
@@ -256,33 +269,7 @@ class _EndingHostState extends ConsumerState<_EndingHost> {
   }
 
   Future<void> _show(GameController controller) async {
-    final session = controller.session;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('👑 경제적 자유!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Day ${session.clock.day}, 총자산 ${won(session.totalAssets)}.'),
-            const SizedBox(height: 8),
-            const Text('월급쟁이 개미에서 시작해 마침내 10억을 만들었다.\n'
-                '이제 상사 눈치도, 몰래보기 30초도 필요 없다.'),
-            const SizedBox(height: 8),
-            const Text('…물론 내일도 출근은 해야 한다. 계속 달릴까?',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('계속 달린다 🏃'),
-          ),
-        ],
-      ),
-    );
+    await showEnding(context, controller.session);
     controller.resolveEnding();
     if (mounted) setState(() => _showing = false);
   }
@@ -339,6 +326,7 @@ class _GameAlertBannerState extends ConsumerState<_GameAlertBanner> {
     if (controller.alertSeq != _shownSeq) {
       _shownSeq = controller.alertSeq;
       _message = controller.alert;
+      Sfx.play('alert', volume: 0.6);
       _timer?.cancel();
       _timer = Timer(const Duration(seconds: 3), () {
         if (mounted) setState(() => _message = null);

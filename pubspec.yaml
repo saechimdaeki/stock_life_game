@@ -38,6 +38,8 @@ dependencies:
   fl_chart: ^1.2.0
   hive_ce: ^2.19.3
   hive_ce_flutter: ^2.3.4
+  audioplayers: ^6.8.1
+  video_player: ^2.11.1
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +66,8 @@ flutter:
   # 씬 배경 이미지 등. 파일을 넣으면 자동 반영, 없으면 코드가 플레이스홀더로 폴백.
   assets:
     - assets/images/
+    - assets/audio/
+    - assets/videos/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

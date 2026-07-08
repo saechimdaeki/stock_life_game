@@ -10,6 +10,7 @@ import '../../data/game_session.dart';
 import '../../engine/engine.dart';
 import '../format.dart';
 import '../game_controller.dart';
+import '../sound.dart';
 
 /// 종목 상세: 차트 + 매수/매도.
 class StockDetailScreen extends ConsumerWidget {
@@ -521,6 +522,7 @@ class _TradeSheetState extends State<_TradeSheet> {
     final result = widget.isBuy
         ? session.buy(widget.stock, quantity)
         : session.sell(widget.stock, quantity);
+    if (result.isSuccess) Sfx.play(widget.isBuy ? 'buy' : 'sell');
     widget.controller.refresh();
     if (!mounted) return;
     Navigator.pop(context);

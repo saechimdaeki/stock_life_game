@@ -8,6 +8,7 @@ import '../../data/news_feed.dart';
 import '../../engine/engine.dart';
 import '../format.dart';
 import '../game_controller.dart';
+import '../sound.dart';
 import 'scene_view.dart';
 
 /// 홈: 시각/페이즈, 자산 요약, 오늘의 뉴스, 하루 진행 컨트롤.
@@ -50,6 +51,16 @@ class HomeScreen extends ConsumerWidget {
                       Text('속보 피드',
                           style: Theme.of(context).textTheme.titleSmall),
                       const Spacer(),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: Sfx.muted,
+                        builder: (_, muted, _) => IconButton(
+                          onPressed: Sfx.toggleMute,
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(muted ? Icons.volume_off : Icons.volume_up,
+                              size: 18, color: Colors.grey),
+                          tooltip: muted ? '소리 켜기' : '음소거',
+                        ),
+                      ),
                       IconButton(
                         onPressed: () => _showAchievements(context, session),
                         visualDensity: VisualDensity.compact,

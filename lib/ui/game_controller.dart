@@ -12,6 +12,7 @@ import '../data/save_repository.dart';
 import '../engine/engine.dart';
 import 'format.dart';
 import 'screens/cutscene_screen.dart';
+import 'sound.dart';
 
 /// 근무 블록 진입 시 뜨는 인터랙션 종류.
 enum WorkInteractionKind { meeting, smoke, lunch, dinner, coffee, insider }
@@ -174,6 +175,7 @@ class GameController extends ChangeNotifier {
   /// 새로 달성한 업적을 알림·피드로 띄우고, 10억 달성이면 엔딩을 건다.
   void _checkAchievements() {
     final newly = _session.checkAchievements();
+    if (newly.isNotEmpty) Sfx.play('achievement');
     for (final a in newly) {
       alert = '🏆 업적 달성: ${a.emoji} ${a.title}';
       alertSeq++;
