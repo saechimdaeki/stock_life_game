@@ -13,6 +13,13 @@ val admobProperties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// 업로드 서명 키 (android/key.properties, git 미포함).
+// 없으면 디버그 키로 서명해 새 클론에서도 flutter run --release가 된다.
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.junseong.stock_life_game"
     compileSdk = flutter.compileSdkVersion
@@ -37,11 +44,24 @@ android {
                 ?: "ca-app-pub-3940256099942544~3347511713" // 구글 테스트 앱 ID
     }
 
+    signingConfigs {
+        if (!keystoreProperties.isEmpty) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystoreProperties.isEmpty) {
+                signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.getByName("release")
+            }
         }
     }
 }

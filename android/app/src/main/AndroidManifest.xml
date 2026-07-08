@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="stock_life_game"
+        android:label="주식 인생"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

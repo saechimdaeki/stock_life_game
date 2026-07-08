@@ -48,3 +48,8 @@ app.*.map.json
 # AdMob 실제 ID (커밋 금지 — *.example 템플릿 참고)
 /android/admob.properties
 /tool/build_release.sh
+
+# 업로드 서명 키 정보 (커밋 금지)
+/android/key.properties
+*.jks
+*.keystore
