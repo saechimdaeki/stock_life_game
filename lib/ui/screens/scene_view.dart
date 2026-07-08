@@ -68,8 +68,8 @@ class SceneView extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Colors.teal.withValues(alpha: 0.15),
-            Colors.black.withValues(alpha: 0.25),
+            Colors.teal.withValues(alpha: 0.12),
+            Colors.teal.withValues(alpha: 0.35),
           ],
         ),
       ),

@@ -38,10 +38,20 @@ class StockLifeApp extends StatelessWidget {
     return MaterialApp(
       title: '주식 인생',
       debugShowCheckedModeBanner: false,
+      // 다크 유지하되 순검정 대신 차콜 톤으로 띄워 눈 피로를 줄인다 (피드백 반영).
       theme: ThemeData(
-        brightness: Brightness.dark,
-        colorSchemeSeed: Colors.teal,
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.teal,
+          brightness: Brightness.dark,
+        ).copyWith(
+          surface: const Color(0xFF1C2226), // 스캐폴드 배경
+          surfaceContainerLowest: const Color(0xFF171C20),
+          surfaceContainerLow: const Color(0xFF21282D), // 카드
+          surfaceContainer: const Color(0xFF262D33), // 내비게이션 바
+          surfaceContainerHigh: const Color(0xFF2B333A), // 시트·다이얼로그
+          surfaceContainerHighest: const Color(0xFF303941),
+        ),
       ),
       // 몰래보기 카운트다운은 Navigator 위에 얹어 어떤 라우트(종목 상세 등)에서도 보인다.
       builder: (context, child) => Stack(

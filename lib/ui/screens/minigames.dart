@@ -220,7 +220,7 @@ class _MashGameState extends State<MashGame> {
             style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: _count >= _target ? Colors.green : Colors.white)),
+                color: _count >= _target ? Colors.green : null)),
         const SizedBox(height: 16),
         GestureDetector(
           onTapDown: (_) {
@@ -358,8 +358,6 @@ class _SneakPeekGameState extends State<SneakPeekGame> {
             child: LinearProgressIndicator(
               value: _gauge.clamp(0.0, 1.0),
               minHeight: 10,
-              color: Colors.tealAccent,
-              backgroundColor: Colors.white12,
             ),
           ),
         ),
@@ -607,14 +605,14 @@ class _NumberHuntGameState extends State<NumberHuntGame> {
         decoration: BoxDecoration(
           color: found
               ? Colors.teal.withValues(alpha: 0.25)
-              : Colors.white.withValues(alpha: 0.12),
+              : Colors.teal.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text('$n',
             style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w700,
-                color: found ? Colors.teal : Colors.white)),
+                color: found ? Colors.teal : null)),
       ),
     );
   }

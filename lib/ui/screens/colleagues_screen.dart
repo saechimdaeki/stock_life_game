@@ -81,7 +81,6 @@ class _ColleagueCard extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: rapport / 100,
                       minHeight: 8,
-                      backgroundColor: Colors.white12,
                       color: maxed ? Colors.amber : Colors.teal,
                     ),
                   ),
