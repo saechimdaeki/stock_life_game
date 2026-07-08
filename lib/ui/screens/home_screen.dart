@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../ads/ads.dart';
+import '../../ads/reward_gate.dart';
 import '../../data/achievements.dart';
 import '../../data/game_session.dart';
 import '../../data/news_feed.dart';
@@ -43,6 +45,7 @@ class HomeScreen extends ConsumerWidget {
                         ? session.clock.minuteOfDay
                         : null,
                   ),
+                  _AdRewardCard(controller: controller),
                   const SizedBox(height: 4),
                   Row(
                     children: [
@@ -456,6 +459,90 @@ class _ScheduleTimeline extends StatelessWidget {
   }
 }
 
+/// 광고 보상 진입점 카드: 애널리스트 리포트(하루 1회) + 구제금융(파산 위기).
+/// 둘 다 불가능하면 아예 표시하지 않는다.
+class _AdRewardCard extends StatelessWidget {
+  const _AdRewardCard({required this.controller});
+
+  final GameController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = controller.session;
+    final report = session.analystReportAvailable;
+    final bailout = session.bailoutAvailable;
+    if (!report && !bailout) return const SizedBox.shrink();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+        child: Column(
+          children: [
+            if (report)
+              _AdRewardRow(
+                emoji: '📊',
+                title: '애널리스트 리포트',
+                desc: '재료가 살아있는 종목의 진짜 방향 (하루 1회)',
+                onRewarded: controller.grantAnalystReport,
+              ),
+            if (bailout)
+              _AdRewardRow(
+                emoji: '🆘',
+                title: '구제금융',
+                desc: '긴급 자금 ${won(GameSession.bailoutAmount)} '
+                    '(남은 ${GameSession.maxBailouts - session.bailoutsUsed}회)',
+                onRewarded: controller.grantBailout,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdRewardRow extends StatelessWidget {
+  const _AdRewardRow({
+    required this.emoji,
+    required this.title,
+    required this.desc,
+    required this.onRewarded,
+  });
+
+  final String emoji;
+  final String title;
+  final String desc;
+  final VoidCallback onRewarded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 18)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(desc,
+                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            ],
+          ),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: () async {
+            if (await watchRewardedAd(context)) onRewarded();
+          },
+          style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+          icon: const Icon(Icons.smart_display, size: 15),
+          label: const Text('광고', style: TextStyle(fontSize: 12)),
+        ),
+      ],
+    );
+  }
+}
+
 /// 텔레그램형 속보 피드. 최신 항목이 위. 장중에 실시간으로 쌓인다.
 class _NewsFeed extends StatelessWidget {
   const _NewsFeed({required this.session});
@@ -589,10 +676,23 @@ class _DayControls extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     switch (controller.stage) {
       case DayStage.morning:
-        return FilledButton.icon(
-          onPressed: controller.startDay,
-          icon: const Icon(Icons.wb_sunny),
-          label: const Text('하루 시작'),
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilledButton.icon(
+              onPressed: controller.startDay,
+              icon: const Icon(Icons.wb_sunny),
+              label: const Text('하루 시작'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () async {
+                if (await watchRewardedAd(context)) controller.skipWholeDay();
+              },
+              icon: const Icon(Icons.smart_display, size: 18),
+              label: const Text('광고 보고 오늘 하루 통째로 스킵'),
+            ),
+          ],
         );
       case DayStage.running:
         // 하루가 계속 흐른다. 급하면 일시정지·배속, 죽은 시간은 스킵.
@@ -662,6 +762,7 @@ class _DayControls extends ConsumerWidget {
       BuildContext context, GameController controller) async {
     final session = controller.session;
     final pnl = session.todayPnl;
+    final banner = Ads.settlementBanner();
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -678,6 +779,10 @@ class _DayControls extends ConsumerWidget {
             const SizedBox(height: 8),
             const Text('취침 중에도 미장은 계속됩니다...',
                 style: TextStyle(fontSize: 12, color: Colors.grey)),
+            if (banner != null) ...[
+              const SizedBox(height: 12),
+              Center(child: banner),
+            ],
           ],
         ),
         actions: [

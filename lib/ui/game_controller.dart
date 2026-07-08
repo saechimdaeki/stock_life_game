@@ -464,6 +464,51 @@ class GameController extends ChangeNotifier {
     play();
   }
 
+  /// (광고 보상) 아침 브리핑에서 오늘 하루를 통째로 스킵해 바로 정산으로.
+  /// 시세·이벤트는 그대로 시뮬되지만 근무 인터랙션은 건너뛴다.
+  void skipWholeDay() {
+    if (_stage != DayStage.morning) return;
+    _stage = DayStage.running;
+    while (_session.advanceTick()) {}
+    _drainIntradayNews();
+    _checkAchievements();
+    _stage = DayStage.dayOver;
+    notifyListeners();
+  }
+
+  /// (광고 보상) 애널리스트 리포트: 진짜 방향 팁을 피드·알림으로 띄운다.
+  void grantAnalystReport() {
+    final r = _session.runAnalystReport();
+    if (r == null) return;
+    final dir = r.tip.bullish ? '상승' : '하락';
+    final until = r.daysLeft != null ? ' — 재료 D+${r.daysLeft}까지 유효' : '';
+    _session.pushNews(FeedItem(
+      minute: _session.clock.minuteOfDay,
+      text: '📊 애널리스트 리포트: ${r.stock.name} $dir 우세$until',
+      tone: r.tip.bullish ? 1 : -1,
+      channel: '리포트',
+    ));
+    alert = '📊 리포트 도착: ${r.stock.name} $dir 우세';
+    alertSeq++;
+    notifyListeners();
+  }
+
+  /// (광고 보상) 구제금융: 파산 위기에 긴급 현금을 지원한다.
+  void grantBailout() {
+    final amount = _session.applyBailout();
+    if (amount == null) return;
+    _session.pushNews(FeedItem(
+      minute: _session.clock.minuteOfDay,
+      text: '🆘 구제금융 ${won(amount)} 입금 '
+          '(${_session.bailoutsUsed}/${GameSession.maxBailouts}회 사용)',
+      tone: 0,
+      channel: '은행',
+    ));
+    alert = '🆘 구제금융 ${won(amount)} 입금';
+    alertSeq++;
+    notifyListeners();
+  }
+
   /// 남은 하루를 즉시 진행해 정산 화면으로 넘어간다.
   void skipToDayEnd() {
     if (_stage != DayStage.running) return;

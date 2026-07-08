@@ -109,6 +109,15 @@ class GameSession {
   /// 일봉 저장 상한 (세이브 용량 관리).
   static const int maxCloseHistory = 120;
 
+  /// 구제금융(광고 보상): 총자산이 이 값 미만으로 무너지면 신청 가능.
+  static const double bailoutThreshold = 3000000;
+
+  /// 구제금융 1회 지원 금액.
+  static const double bailoutAmount = 5000000;
+
+  /// 게임(세이브)당 구제금융 최대 횟수.
+  static const int maxBailouts = 3;
+
   final GameClock clock;
   final Market market;
   final Portfolio portfolio;
@@ -153,6 +162,50 @@ class GameSession {
 
   /// 오늘 얻은 종목 정보(팁). 아침마다 리셋 — 저장 안 함.
   final List<StockTip> todayTips = [];
+
+  /// 지금까지 받은 구제금융 횟수. 저장됨.
+  int bailoutsUsed = 0;
+
+  /// 마지막으로 애널리스트 리포트를 받은 날 (하루 1회 제한). 저장됨.
+  int analystReportDay = 0;
+
+  bool get bailoutAvailable =>
+      totalAssets < bailoutThreshold && bailoutsUsed < maxBailouts;
+
+  /// 구제금융 실행(광고 보상 후 호출). 성공 시 지원 금액, 조건 미달이면 null.
+  double? applyBailout() {
+    if (!bailoutAvailable) return null;
+    bailoutsUsed += 1;
+    portfolio.cash += bailoutAmount;
+    return bailoutAmount;
+  }
+
+  /// 재료(활성 이벤트)가 살아 있는 상장 종목들.
+  List<Stock> _eventStocks() => [
+        for (final s in market.listedStocks)
+          if (market.eventEngine.muBonusFor(s) != 0) s,
+      ];
+
+  bool get analystReportAvailable =>
+      analystReportDay < clock.day && _eventStocks().isNotEmpty;
+
+  /// 애널리스트 리포트(광고 보상 후 호출): 재료가 살아 있는 종목 하나의
+  /// 진짜 방향과 잔여일을 알려준다. 하루 1회, 재료가 없으면 null.
+  ({StockTip tip, Stock stock, int? daysLeft})? runAnalystReport() {
+    if (analystReportDay >= clock.day) return null;
+    final candidates = _eventStocks();
+    if (candidates.isEmpty) return null;
+    final stock = candidates[_tipRng.nextInt(candidates.length)];
+    final tip = StockTip(
+      stockCode: stock.code,
+      bullish: market.eventEngine.muBonusFor(stock) > 0,
+      reliable: true,
+      fromName: '애널리스트',
+    );
+    todayTips.add(tip);
+    analystReportDay = clock.day;
+    return (tip: tip, stock: stock, daysLeft: _eventDaysLeftFor(stock));
+  }
 
   /// 회식 등으로 취한 상태. 밤 미장 차트가 흔들려 보인다. 아침이면 술 깸.
   bool drunk = false;
@@ -500,6 +553,8 @@ class GameSession {
         'insiderResolveDay': insiderResolveDay,
         'insiderFromId': insiderFromId,
         'condition': condition,
+        'bailoutsUsed': bailoutsUsed,
+        'analystReportDay': analystReportDay,
         'usdKrw': market.usdKrw,
         'achievements': achievements.toList(),
         'endingSeen': endingSeen,
@@ -632,6 +687,8 @@ class GameSession {
       ..avatarId = (json['avatarId'] as int?) ?? 0
       // 저장은 취침 직후(회복 전) 값 — 아래 startDay()가 회복을 적용한다.
       ..condition = (json['condition'] as int?) ?? 100
+      ..bailoutsUsed = (json['bailoutsUsed'] as int?) ?? 0
+      ..analystReportDay = (json['analystReportDay'] as int?) ?? 0
       ..endingSeen = (json['endingSeen'] as bool?) ?? false;
     session.market.usdKrw =
         (json['usdKrw'] as num?)?.toDouble() ?? kUsdKrw;

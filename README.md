@@ -9,7 +9,7 @@
 
 ![Flutter](https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white)
 ![Dart SDK](https://img.shields.io/badge/Dart-%5E3.12-0175C2?logo=dart&logoColor=white)
-![tests](https://img.shields.io/badge/tests-78%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-86%20passing-brightgreen)
 ![platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-lightgrey)
 ![state](https://img.shields.io/badge/state-Riverpod-4B32C3)
 
@@ -114,6 +114,12 @@
 - 업적 11종(첫 매매, 자산 마일스톤, 승진, 친밀도, 생존일). 달성 시 알림+피드, 홈 🏆에서 열람
 - 총자산 10억 = 경제적 자유 엔딩 — 왕관·자산 카운트업·통계가 떠오르는 전용 엔딩 시퀀스
 
+### 수익화 (AdMob)
+- **보상형 광고 3종**: 📊 애널리스트 리포트(재료 살아있는 종목의 진짜 방향+잔여일, 하루 1회) / ⏭ 하루 통째 스킵(아침 브리핑에서 바로 정산으로) / 🆘 구제금융(총자산 300만원 미만일 때 500만원 지원, 게임당 3회)
+- **배너 광고**: 하루 정산 다이얼로그 하단
+- UMP 동의 플로우(EEA) 내장. 웹·데스크톱·테스트에서는 광고 없이 보상만 주는 스텁으로 동작해 개발 흐름이 끊기지 않음
+- 현재는 구글 공식 테스트 광고 ID — 출시 전 실제 AdMob ID로 교체 필요(`lib/ads/ads_real.dart`, `AndroidManifest.xml`, `Info.plist`의 TODO)
+
 ### 비주얼 · 사운드
 - 컷씬 시네마틱: 레터박스 + 대사 타자기 연출 + 배경 Ken Burns, `assets/videos/`에 mp4를 넣으면 배경 영상 재생
 - 아바타: 개별 PNG 또는 한 장짜리 캐릭터 시트(`avatar_sheet.png`, 4×2) 지원, 없으면 벡터 폴백
@@ -123,7 +129,7 @@
 
 ## 🛠 기술 스택 & 아키텍처
 
-**Flutter** · **Riverpod**(상태) · **fl_chart**(차트) · **Hive**(로컬 저장) · **audioplayers**(사운드) · **video_player**(컷씬 영상)
+**Flutter** · **Riverpod**(상태) · **fl_chart**(차트) · **Hive**(로컬 저장) · **audioplayers**(사운드) · **video_player**(컷씬 영상) · **google_mobile_ads**(수익화)
 
 게임 로직 엔진은 UI 의존성이 0이라, 화면 없이 `flutter test`로 수천 일 몬테카를로
 시뮬레이션을 돌려 밸런스를 검증합니다.
@@ -136,6 +142,7 @@ lib/
 │   ├── events/    #   이벤트 테이블·가중치 추첨·효과 관리
 │   └── portfolio/ #   매수/매도/손익 정산
 ├── data/          # 세션(월급·승진·친밀도·컨디션·업적·직렬화), 동료, 뉴스 피드, Hive 저장
+├── ads/           # AdMob 파사드 (웹/데스크톱은 스텁으로 폴백 — 조건부 import)
 └── ui/            # 화면·게임 루프 컨트롤러·캐릭터 아바타
 ```
 
@@ -143,7 +150,7 @@ lib/
 
 ```bash
 flutter run       # 실행 (기기/에뮬 또는 -d chrome)
-flutter test      # 단위 테스트 78개 + 몬테카를로 밸런스 리포트 출력
+flutter test      # 단위 테스트 86개 + 몬테카를로 밸런스 리포트 출력
 flutter analyze   # 정적 분석
 ```
 
@@ -159,8 +166,8 @@ flutter analyze   # 정적 분석
 - [x] **Phase 3** — 변동 환율, IPO/상장폐지, 업적, 경제적 자유 엔딩
 - [x] **Phase 4** — 인사고과(승진/경고/해고·전업투자자 루트), 내부자 정보 딜레마(금감원 조사), 컷씬 시스템(인터랙션 진입 장면 + 이벤트 컷씬), 미니게임 교체(몰래 폰 보기)
 - [x] **Phase 5** — 비주얼 강화: 컷씬 시네마틱(레터박스·타자기 연출·배경 영상 지원), 아바타 캐릭터 시트, 효과음/BGM(음소거 토글), 엔딩 시퀀스
-- [ ] **Phase 6** — AdMob 수익화, 폴리시
-- [ ] **Phase 7** — Google Play 출시 → iOS 확장
+- [x] **Phase 6** — AdMob 수익화: 보상형 3종(애널리스트 리포트·하루 스킵·구제금융) + 정산 배너, UMP 동의
+- [ ] **Phase 7** — Google Play 출시(실제 AdMob ID 교체·개인정보처리방침·스토어 등록) → iOS 확장
 
 ---
 

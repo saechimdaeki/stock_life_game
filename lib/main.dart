@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'ads/ads.dart';
 import 'data/save_repository.dart';
 import 'ui/game_controller.dart';
 import 'ui/screens/character_creation_screen.dart';
@@ -19,6 +20,8 @@ import 'ui/sound.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 광고 초기화(동의 수집 포함)는 게임 시작을 막지 않게 백그라운드로.
+  unawaited(Ads.init());
   final saveRepository = SaveRepository();
   await saveRepository.init();
   runApp(
